@@ -90,6 +90,9 @@ RATE_WINDOW_SECONDS = 60
 RATE_MAX_REQUESTS = 8
 RATE_MAX_KEYS = 5_000
 RATE_HITS: dict[str, deque[float]] = defaultdict(deque)
+LOGIN_WINDOW_SECONDS = 300
+LOGIN_MAX_ATTEMPTS = 8
+LOGIN_HITS: dict[str, deque[float]] = defaultdict(deque)
 # A review checks whether claims are true. Nothing checked whether the draft was
 # still a deliverable, so a remediation could delete every claim, pass every
 # rule, and hand a one-line shell to the human gate. These are the floor.
@@ -250,6 +253,29 @@ def rate_limit(user_id: str, route: str) -> None:
     if len(RATE_HITS) > RATE_MAX_KEYS:
         for key in [key for key, hits in RATE_HITS.items() if not hits or hits[-1] < cutoff]:
             del RATE_HITS[key]
+
+
+def login_rate_limit(environ, email: str) -> None:
+    """Throttle credential attempts before any password is compared.
+
+    rate_limit() keys on a user id, and at sign-in there is no user id yet, so
+    this cannot reuse it. The key pairs the client address with a hash of the
+    email: one address guessing at one account is slowed, and an attacker
+    cannot lock out a stranger's account by hammering it from elsewhere.
+    """
+    address = str(environ.get("REMOTE_ADDR") or "unknown").split(",")[0].strip()
+    digest = hashlib.sha256(email.casefold().encode()).hexdigest()[:16]
+    key = f"{address}:{digest}"
+    cutoff = time.monotonic() - LOGIN_WINDOW_SECONDS
+    bucket = LOGIN_HITS[key]
+    while bucket and bucket[0] < cutoff:
+        bucket.popleft()
+    if len(bucket) >= LOGIN_MAX_ATTEMPTS:
+        raise APIError(429, "Too many sign-in attempts for this account. Wait five minutes and try again.", "rate_limited")
+    bucket.append(time.monotonic())
+    if len(LOGIN_HITS) > RATE_MAX_KEYS:
+        for stale in [k for k, hits in LOGIN_HITS.items() if not hits or hits[-1] < cutoff]:
+            del LOGIN_HITS[stale]
 
 
 def issue_session(user_id: str):
@@ -973,6 +999,7 @@ def application(environ, start_response):
             password = str(data.get("password", ""))
             if not re.fullmatch(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,30}", email) or len(password) < 12 or len(password) > 256:
                 raise APIError(400, "Enter a valid email and a password of at least 12 characters.", "invalid_credentials")
+            login_rate_limit(environ, email)
             if path.endswith("register"):
                 owner = uid()
                 try:

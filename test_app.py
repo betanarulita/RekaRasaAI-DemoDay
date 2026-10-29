@@ -39,6 +39,7 @@ class WorkflowTests(unittest.TestCase):
             app.DB_PATH.unlink()
         app.init_db()
         app.RATE_HITS.clear()
+        app.LOGIN_HITS.clear()
 
     def request(self, path, method="GET", body=None, cookie=None, csrf=None):
         raw = json.dumps(body or {}).encode()
@@ -670,6 +671,21 @@ class WorkflowTests(unittest.TestCase):
         review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (version_id,)).fetchone(), findings, set())
         self.assertEqual(review["verdict"], "Needs Evidence")
         db.close()
+
+    def test_repeated_sign_in_attempts_are_throttled(self):
+        # rate_limit() keys on a user id and sign-in has none, so login needed
+        # its own limiter. Before this, a password could be guessed without
+        # limit; PBKDF2 made each guess slow but never stopped the loop.
+        self.register()
+        blocked = False
+        for _ in range(app.LOGIN_MAX_ATTEMPTS + 1):
+            status, _, body = self.request("/api/login", "POST", {"email": "owner@example.test", "password": "wrong-password-123"})
+            if status == 429:
+                blocked = True
+                self.assertEqual(body["code"], "rate_limited")
+                break
+            self.assertEqual(status, 401, body)
+        self.assertTrue(blocked, "sign-in attempts were never throttled")
 
     def test_a_rule_id_placed_in_the_criterion_field_is_recovered(self):
         # Seen against the live provider: the model returned four Pass findings
