@@ -105,6 +105,13 @@ FORMAT_FLOORS = (
     ("poster", 120),
     ("hero", 120),
 )
+# Everything the positive prompt must not ask for. Base SD 1.5 renders text as
+# noise and follows a negation poorly, so these go here and not in the prompt.
+IMAGE_NEGATIVE_PROMPT = (
+    "text, letters, words, watermark, signature, logo, label, badge, stamp, "
+    "certificate, price tag, poster, blurry, low quality, jpeg artifacts, "
+    "deformed, cluttered, multiple products, hands, people"
+)
 
 
 def now() -> str:
@@ -825,13 +832,16 @@ def image_prompt_context(task: sqlite3.Row, project_name: str, sources: list[dic
             f"Content task: {task['title']} ({task['platform']} / {task['format']})\n"
             f"Creative angle: {task['angle']}\nGoal: {task['goal']}\n"
             f"Documented project context (visual reference; do not add unsupported claims):\n{facts}\n\n"
-            "Create a polished, appetizing, creator-ready composition. Avoid text, badges, certification marks, or health claims unless specifically requested in the editable prompt. Leave room for accurate copy to be added later.")[:6000]
+            "Create a polished, creator-ready composition with room for accurate copy to be added later.")[:6000]
 
 
 def image_prompt_direction(task: sqlite3.Row, project_name: str) -> str:
-    return (f"Create a premium promotional visual for {project_name}, supporting the {task['title']} task on {task['platform']}. "
+    # Exclusions belong in the negative prompt. On SD 1.5, writing "no text,
+    # no logos" inside the positive prompt tends to summon exactly those.
+    return (f"A product photograph of the {project_name} packaging, supporting the {task['title']} task on {task['platform']}. "
             f"Audience: {task['audience']}. Creative angle: {task['angle']}. Goal: {task['goal']}. "
-            "Use the documented project product appearance. Warm natural light, tactile materials, polished editorial composition, no text, logos, certification marks, or health claims.")[:2500]
+            "One clear product hero, centred, generous negative space, soft directional daylight, "
+            "matte surface, shallow depth of field, editorial still life, clean and uncluttered.")[:2500]
 
 
 def call_image_provider(prompt: str, size: str) -> tuple[bytes, str]:
@@ -877,7 +887,7 @@ def call_comfyui_provider(prompt: str, size: str) -> tuple[bytes, str]:
     workflow = {
         "1": {"class_type":"CheckpointLoaderSimple", "inputs":{"ckpt_name":COMFYUI_CHECKPOINT}},
         "2": {"class_type":"CLIPTextEncode", "inputs":{"text":prompt, "clip":["1",1]}},
-        "3": {"class_type":"CLIPTextEncode", "inputs":{"text":"text, watermark, logo, blurry, low quality", "clip":["1",1]}},
+        "3": {"class_type":"CLIPTextEncode", "inputs":{"text":IMAGE_NEGATIVE_PROMPT, "clip":["1",1]}},
         "4": {"class_type":"EmptyLatentImage", "inputs":{"width":width, "height":height, "batch_size":1}},
         "5": {"class_type":"KSampler", "inputs":{"seed":secrets.randbelow(2**32), "steps":25, "cfg":7.0, "sampler_name":"euler", "scheduler":"normal", "denoise":1.0,
             "model":["1",0], "positive":["2",0], "negative":["3",0], "latent_image":["4",0]}},
