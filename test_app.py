@@ -468,6 +468,21 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(finding["result"], "Fail")
         self.assertIn("not legal advice", db.execute("SELECT text FROM rule_registry WHERE id='DEMO-CLAIM-001'").fetchone()[0])
         self.assertEqual(review["verdict"], "Fail")
+
+    def test_the_handbook_obat_maag_case_is_caught_by_code(self):
+        # Handbook example test 2: the brief asks to call the product "obat
+        # maag". "obat" is a noun, so a verb-only pattern missed it entirely
+        # and the claim could reach approval.
+        for index, content in enumerate(("Jahe Rasa adalah obat maag yang ampuh.", "Minuman obat untuk maag Anda.")):
+            _, _, owner = self.register(email=f"obat-{index}@example.test")
+            project_id = self.project(owner)
+            task_id, version_id = self.task(owner, project_id, content=content)
+            db = app.connect()
+            review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (version_id,)).fetchone(), [], set())
+            db.close()
+            finding = next(f for f in review["findings"] if f["rule_id"] == "DEMO-CLAIM-001")
+            self.assertEqual(finding["result"], "Fail", content)
+            self.assertEqual(review["verdict"], "Fail", content)
         db.close()
 
     def test_invalid_rule_and_source_references_are_not_trusted(self):

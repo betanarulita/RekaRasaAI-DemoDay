@@ -1,53 +1,96 @@
-# RekaRasa.ai — Demo Day
+# RekaRasa.ai — the creator agent that refuses unsourced claims
 
-An independent creator workspace for briefs, product sources, AI plans and drafts, evidence-based review, human approval, and a persistent audit trail. This project was built in `RekaRasaAI-DemoDay`; it does not import or depend on the separate local RekaRasa project.
+RekaRasa is a creator workspace that turns a product brief into marketing copy, and then **will not let that copy through until its claims are backed by a source attached to the project**. Three agents propose. Server-side code decides. A human approves. The model never has the last word.
 
-## Implementation log
+Built for **AI CAN DO IT — Tencent Cloud Hackathon Indonesia 2026**, Challenge C (The Creator Agent).
 
-- Foundation: isolated Python WSGI application, SQLite schema migrations, account sessions, per-user ownership checks, and demo rule registry.
-- Core workflow: separate Planner, Writer, and Reviewer contracts; confirmed plans; source-checked drafts; bounded remediation; immutable versions; review findings; human approval; and audit events.
-- Product UI: connected Home, New Chat, Planner list/calendar, Projects, Riwayat, Settings, and workbench flows. Browser smoke testing found and fixed an invalid CSS line-break issue; mobile width now fits the viewport.
-- Verification: see the latest unit-test and provider smoke-test results below.
-- Deployment: Docker and Render configuration are prepared. No Render account/repository authorization is available in this environment, so there is no public deployment URL yet.
+## Why this is not a text generator with a review button
 
-## Latest provider migration
+Most "agent" demos ask a model to grade its own homework. That is not accountability — it is a second opinion from the same source of error. RekaRasa splits the work so that no single component can wave content through:
 
-- Default development provider is Groq at `https://api.groq.com/openai/v1`, using model `openai/gpt-oss-20b`.
-- `.env` loads at startup without overwriting process environment variables; the existing local `.env` is ignored by Git and was left untouched.
-- Groq strict JSON Schema is sent for all three roles; the app validates output locally and enforces constraints Groq does not receive.
-- Image providers now include OpenAI Images (default) and local ComfyUI. ComfyUI uses the standard `/prompt`, `/history/{prompt_id}`, and `/view` routes with a core-node SD 1.5 workflow. Local ComfyUI was not reachable during this session, so only fake-service coverage is verified.
-- Current verification: `python -m py_compile app.py test_app.py` passed and `python -m unittest -q test_app` passed (35 tests). Tests use fake model/image services and do not verify live Groq or ComfyUI connectivity.
+| Layer | Job | Can it be talked out of it? |
+|---|---|---|
+| **Model** (Groq `openai/gpt-oss-20b`) | Proposes findings | Yes — this is the component we assume can be wrong |
+| **Code** (`save_review()`) | Decides whether a finding is valid | No — not from any client |
+| **WorkBuddy** | Runs the loop, picks the next step | No — it reads the verdict, it cannot change it |
+| **Human** | Approves | That is the point |
+
+Four checks run in `save_review()`, all of them in code, none of them in the prompt:
+
+1. A `rule_id` that is not in the project's rule registry cannot support a pass.
+2. A `source_id` that is not attached to this project cannot support a pass.
+3. A pass on a factual rule must cite the source that states the fact.
+4. Any configured rule the Reviewer did not address is recorded as `Needs Evidence`, never as a silent pass.
+
+Two deterministic regex guards run independently of the model: a disease-cure claim and an undocumented halal claim are caught even if the Reviewer says `Pass`. That is deliberate — a rule whose pass no longer requires a citation is still enforced by code rather than by trust.
+
+## The workflow
+
+```
+brief → Planner proposes → human confirms the plan → tasks
+      → Writer drafts → Reviewer judges → save_review() decides
+      → Pass            → human approval gate → approved
+      → Fail / Needs Evidence → Writer remediation (max 3) → escalate
+      → Reviewer crashed      → draft preserved, review retried, never a dead end
+```
+
+Each state has exactly one meaning, and each action is legal in exactly one state. A human edit produces a `pending` version that needs a *review*, not a rewrite — so a Writer retry can never silently overwrite work a person typed.
+
+## Verified, not asserted
+
+Last run against the live provider (`openai/gpt-oss-20b`, 29 October 2026), on a throwaway database:
+
+```
+register           200
+planner            201   proposed "Afternoon Calm Social Media Copy"
+confirm-plan       200
+writer + reviewer  201   verdict=Pass
+approve            200   task → human_approved
+```
+
+Four findings, one per configured rule, all `Pass`, with the factual rule citing the attached source. Three model calls, no retries.
+
+`46 tests pass` (`pytest test_app.py`). They cover account isolation, CSRF, source and rule reference validation, the cure-claim and halal guards, evidence requirements, bounded remediation, the approval gate, edit-after-approval, provider failure mapping, and migration idempotency.
+
+## How WorkBuddy participates
+
+`integrations/workbuddy/` holds the `rekarasa-creator` skill: a `SKILL.md` plus a stdlib-only CLI bridge over 17 API commands. WorkBuddy is the runtime that drives the loop — it calls the Planner, reads the verdict, chooses between remediation and escalation, and stops at the human gate.
+
+It is an adapter, not an authority. The CLI is a thin HTTP client with no rules inside it: if the skill were deleted, every guard would still hold, because they live in `save_review()` and are enforced server-side.
 
 ## What works
 
 - Account registration and sign-in, salted PBKDF2 password hashes, expiring HTTP-only sessions, SameSite cookies, and CSRF checks on mutations.
 - Per-account projects, Markdown/plain-text source material, Planner conversations, tasks, versions, reviews, findings, approvals, token usage, and audit events stored in SQLite.
-- Server-side Groq Chat Completions calls using `openai/gpt-oss-20b` and strict JSON Schema contracts for Planner, Writer, and Reviewer. The server validates every response against the local contract before use. Content Studio keeps OpenAI Images as its default and can instead send a generated SD 1.5 workflow to local ComfyUI; resulting PNGs and task metadata persist in the configured image folder/database.
-- A plan must be confirmed before tasks can generate drafts. Initial generation reviews every version; revisions are user-triggered and each creates a new immutable version.
-- Demo review rules are versioned in the database. Unknown rule/source references cannot justify approval; claim findings that pass without source evidence are downgraded to `Needs Evidence`; a deterministic demo guard rejects disease-cure claims.
-- A maximum of three remediation attempts per task. The first Writer revision after rejection counts as attempt 1. At attempt 3, unresolved findings move to human escalation.
-- Human approval requires a passing review of the latest version. Editing creates a fresh pending version and clears the previous approval. Manual copy is enabled only after approval.
+- Server-side Groq Chat Completions calls with strict JSON Schema contracts for all three roles. The server validates every response against the local contract before use.
+- A plan must be confirmed before tasks can generate drafts. Each revision creates a new immutable version; history is never overwritten.
+- A maximum of three remediation attempts per task, then human escalation. Human approval requires a passing review of the latest version.
+- Content Studio can generate and persist a PNG per task through OpenAI Images or a local ComfyUI server.
 - Planner list and calendar views; production deadlines and planned publication times are separate fields. No publishing integration is configured and the app never reports a publication.
-- Plain text and Markdown file upload, capped at 250 KB. PDF extraction is not implemented.
-- A natural-language brief can reach Planner without output preferences. Planner may propose up to six deliverables (including posters/static ads, hero-image direction, social content, short-form video, marketplace listings, bundles, and custom formats), each with a short selection reason. Preferences remain optional guidance; existing TikTok and marketplace tasks remain supported. Users can edit title, format, platform, angle, and goal before confirmation.
-- Approved text can be copied or downloaded as a TXT file. Content Studio can generate and persist a separate PNG visual per task through OpenAI Images or configured local ComfyUI. External publishing, scheduling, and video generation are not implemented.
+- Plain text and Markdown upload, capped at 250 KB. PDF extraction is not implemented.
 
 ## Local development
 
-Requirements: Python 3.13+ and a modern browser. The application uses a small standard-library `.env` loader, so no dotenv package is required. `waitress` is used by the production Docker image.
+Requirements: Python 3.10+ (developed and tested on 3.12). The application uses a small standard-library `.env` loader, so no dotenv package is required. `waitress` is used by the production Docker image.
 
-1. Copy `.env.example` to `.env` only if you do not already have a local `.env`; the app reads it at startup and never replaces variables already set in the process environment.
-2. Set `GROQ_API_KEY` for live text generation. For OpenAI image generation, set `OPENAI_API_KEY`. For local ComfyUI, set `IMAGE_PROVIDER=comfyui`, `COMFYUI_URL` (default `http://127.0.0.1:8188`), and `COMFYUI_CHECKPOINT` to the exact installed checkpoint filename. The local ComfyUI server must be reachable from the backend process.
+1. Copy `.env.example` to `.env` if you do not already have one; the app reads it at startup and never replaces variables already set in the process environment.
+2. Set `GROQ_API_KEY` for live text generation. For OpenAI image generation, set `OPENAI_API_KEY`. For local ComfyUI, set `IMAGE_PROVIDER=comfyui`, `COMFYUI_URL` (default `http://127.0.0.1:8188`), and `COMFYUI_CHECKPOINT` to the exact installed checkpoint filename.
 3. Start with `python app.py` from this directory.
 4. Open `http://127.0.0.1:8000`, create an account, and start in the seeded **Demo · Jahe Rasa** project.
 
-The app creates `data/rekarasa.sqlite3`, stores image files in `data/generated-images`, and applies numbered SQL migrations from `migrations/` plus the versioned demo rule registry at startup. Migration versions are recorded in `schema_migrations`. To reset a local demo, stop the server and remove that local `data` directory; this deletes the local demo data. Do not use that reset on a deployment without first exporting the database.
+The app creates `data/rekarasa.sqlite3`, stores image files in `data/generated-images`, and applies numbered SQL migrations from `migrations/` plus the versioned demo rule registry at startup. Migration versions are recorded in `schema_migrations`. To reset a local demo, stop the server and remove that local `data` directory. Do not do that on a deployment without exporting the database first.
 
 ## Tests and checks
 
-Run `python -m unittest -v test_app` and `python -m py_compile app.py test_app.py`. The tests cover account isolation, CSRF, source and rule references, the cure-claim rule, missing evidence, bounded remediation, human approval, edit-after-approval, provider-unavailable behavior, schemas, persisted versions/audit events, preservation of existing task rows during migration, and two-output generation/review/approval.
+```
+python -m pytest test_app.py -q     # 46 passed
+python -m py_compile app.py test_app.py
+```
 
-The dependency-free client is `static/app.js` and does not require a Node build. Automated image tests mock the provider and make no paid API calls. Browser smoke checked Planner-to-workbench navigation, the brief-filled prompt, missing-key error/loading recovery, and the generated-image preview state. The real provider smoke failed as recorded above.
+Tests use fake model and image services and make no paid API calls. The live provider path was verified separately against Groq, as recorded above.
+
+**Not verified:** the ComfyUI image path has only fake-service coverage — no local ComfyUI server was reachable, so `IMAGE_PROVIDER=comfyui` is exercised by tests but has not produced a real image here. There is also no public deployment URL; everything above was run locally.
+
 
 ## Environment variables
 

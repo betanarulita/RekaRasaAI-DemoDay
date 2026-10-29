@@ -580,9 +580,11 @@ def save_review(db, owner: str, task: sqlite3.Row, version: sqlite3.Row, finding
             return
         verified.append({"criterion": criterion, "result": "Fail", "claim": re.search(pattern, version["content"], re.I).group(0), "rule_id": rule_id, "rule_version": known[rule_id]["version"], "evidence_source_id": None, "explanation": explanation, "recommendation": recommendation, "invalid_reference": False})
 
-    # Deterministic guardrails for the documented demo rules.
+    # Deterministic guardrails for the documented demo rules. The Indonesian
+    # terms matter: the handbook's own example tests use "maag saya sembuh
+    # total" and "obat maag", and "obat" is a noun, so it is easy to miss.
     guard("DEMO-CLAIM-001",
-          r"\b(cure[sd]?|treats?|heals?|sembuh(?:kan)?|mengobati|menyembuhkan)\b.{0,55}\b(maag|ulcer|disease|penyakit|diabetes|kanker|cancer|flu|asma|asthma)\b|\b(maag|ulcer|disease|penyakit|diabetes|kanker|cancer|flu|asma|asthma)\b.{0,55}\b(cure[sd]?|treats?|heals?|sembuh(?:kan)?|mengobati|menyembuhkan)\b",
+          r"\b(cure[sd]?|treats?|heals?|obat(?:nya)?|sembuh(?:kan)?|mengobati|menyembuhkan|mengatasi)\b.{0,55}\b(maag|ulcer|disease|penyakit|diabetes|kanker|cancer|flu|asma|asthma)\b|\b(maag|ulcer|disease|penyakit|diabetes|kanker|cancer|flu|asma|asthma)\b.{0,55}\b(cure[sd]?|treats?|heals?|obat(?:nya)?|sembuh(?:kan)?|mengobati|menyembuhkan|mengatasi)\b",
           "Unsupported cure claim",
           "A disease cure or treatment claim is present. No attached source can establish this claim under the project's demo rule.",
           "Remove the cure claim and use a non-medical product description supported by the attached sources.",
