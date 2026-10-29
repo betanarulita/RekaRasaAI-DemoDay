@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1040" width="1240" height="1040" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#8fa0b5"/>
+    </marker>
+    <marker id="arw" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#c2741a"/>
+    </marker>
+    <marker id="ard" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#b9a6d4"/>
+    </marker>
+  </defs>
+
+  <rect width="1240" height="1040" fill="#ffffff"/>
+
+  <text x="80" y="56" font-size="27" font-weight="700" fill="#0f172a" letter-spacing="-0.4">RekaRasa.ai — architecture</text>
+  <text x="80" y="82" font-size="14" fill="#5b6779">The model proposes. Code decides what is allowed to be published.</text>
+
+  <!-- clients -->
+  <rect x="80" y="110" width="330" height="70" rx="10" fill="#eef4ff" stroke="#c2d6f7"/>
+  <text x="102" y="139" font-size="15" font-weight="600" fill="#0f172a">Browser SPA</text>
+  <text x="102" y="161" font-size="11.5" fill="#5b6779">static/index.html · app.js</text>
+
+  <rect x="430" y="110" width="330" height="70" rx="10" fill="#eef4ff" stroke="#c2d6f7"/>
+  <text x="452" y="139" font-size="15" font-weight="600" fill="#0f172a">WorkBuddy Agent</text>
+  <text x="452" y="161" font-size="11.5" fill="#5b6779">SKILL.md → rekarasa_cli.py</text>
+
+  <path d="M245 180 L245 202" stroke="#8fa0b5" stroke-width="1.6" fill="none" marker-end="url(#ar)"/>
+  <path d="M595 180 L595 202" stroke="#8fa0b5" stroke-width="1.6" fill="none" marker-end="url(#ar)"/>
+
+  <!-- edge -->
+  <rect x="80" y="208" width="680" height="84" rx="10" fill="#f1f8ff" stroke="#b6d9f5"/>
+  <text x="102" y="237" font-size="15" font-weight="600" fill="#0f172a">WSGI edge — application()</text>
+  <text x="102" y="259" font-size="11.5" fill="#5b6779">route dispatch · 1 MB body cap · HttpOnly + SameSite=Strict session cookie</text>
+  <text x="102" y="277" font-size="11.5" fill="#5b6779">CSRF header check · 8 requests per minute, per route, per user</text>
+
+  <path d="M420 292 L420 320" stroke="#8fa0b5" stroke-width="1.6" fill="none" marker-end="url(#ar)"/>
+
+  <!-- orchestration -->
+  <rect x="80" y="326" width="680" height="210" rx="12" fill="#fcfdff" stroke="#dbe4f0"/>
+  <text x="104" y="353" font-size="10.5" font-weight="600" fill="#8a94a6" letter-spacing="1.3">AGENT ORCHESTRATION · CHALLENGE C</text>
+
+  <rect x="104" y="372" width="180" height="112" rx="10" fill="#eef2ff" stroke="#bcc9f7"/>
+  <text x="122" y="400" font-size="14.5" font-weight="600" fill="#0f172a">Planner</text>
+  <text x="122" y="422" font-size="11" fill="#5b6779">reads brief + sources</text>
+  <text x="122" y="439" font-size="11" fill="#5b6779">proposes deliverables</text>
+
+  <rect x="330" y="372" width="180" height="112" rx="10" fill="#eef2ff" stroke="#bcc9f7"/>
+  <text x="348" y="400" font-size="14.5" font-weight="600" fill="#0f172a">Writer</text>
+  <text x="348" y="422" font-size="11" fill="#5b6779">drafts from sources</text>
+  <text x="348" y="439" font-size="11" fill="#5b6779">cites source ids</text>
+
+  <rect x="556" y="372" width="180" height="112" rx="10" fill="#eef2ff" stroke="#bcc9f7"/>
+  <text x="574" y="400" font-size="14.5" font-weight="600" fill="#0f172a">Reviewer</text>
+  <text x="574" y="422" font-size="11" fill="#5b6779">one finding per rule</text>
+  <text x="574" y="439" font-size="11" fill="#5b6779">quotes and cites</text>
+
+  <path d="M284 428 L326 428" stroke="#8fa0b5" stroke-width="1.6" fill="none" marker-end="url(#ar)"/>
+  <path d="M510 428 L552 428" stroke="#8fa0b5" stroke-width="1.6" fill="none" marker-end="url(#ar)"/>
+  <text x="305" y="447" font-size="9.5" fill="#8a94a6" text-anchor="middle">human</text>
+  <text x="305" y="459" font-size="9.5" fill="#8a94a6" text-anchor="middle">confirm</text>
+  <text x="531" y="447" font-size="9.5" fill="#8a94a6" text-anchor="middle">draft</text>
+  <text x="531" y="459" font-size="9.5" fill="#8a94a6" text-anchor="middle">review</text>
+
+  <path d="M646 484 L646 508 L420 508 L420 488" fill="none" stroke="#c2741a" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arw)"/>
+  <text x="533" y="501" font-size="10" fill="#b45309" text-anchor="middle">remediate · max 3, then escalate</text>
+
+  <!-- providers -->
+  <rect x="820" y="326" width="360" height="104" rx="10" fill="#fbf6ff" stroke="#ddc8f2"/>
+  <text x="842" y="355" font-size="14.5" font-weight="600" fill="#0f172a">Groq · Chat Completions</text>
+  <text x="842" y="377" font-size="11" fill="#5b6779">strict JSON Schema per agent role</text>
+  <text x="842" y="394" font-size="11" fill="#5b6779">4 attempts, honours Retry-After</text>
+  <text x="842" y="411" font-size="11" fill="#5b6779">proposes plans, drafts, findings</text>
+
+  <rect x="820" y="446" width="360" height="104" rx="10" fill="#fbf6ff" stroke="#ddc8f2"/>
+  <text x="842" y="475" font-size="14.5" font-weight="600" fill="#0f172a">ComfyUI · local GPU</text>
+  <text x="842" y="497" font-size="11" fill="#5b6779">/prompt → /history → /view</text>
+  <text x="842" y="514" font-size="11" fill="#5b6779">fallback: OpenAI image model</text>
+  <text x="842" y="531" font-size="11" fill="#5b6779">prompt built from task context</text>
+
+  <path d="M760 378 L814 378" stroke="#b9a6d4" stroke-width="1.5" stroke-dasharray="5 4" fill="none" marker-end="url(#ard)"/>
+  <path d="M760 498 L814 498" stroke="#b9a6d4" stroke-width="1.5" stroke-dasharray="5 4" fill="none" marker-end="url(#ard)"/>
+
+  <!-- trust boundary -->
+  <rect x="80" y="580" width="1100" height="40" rx="6" fill="#fff1f2" stroke="#fda4af" stroke-dasharray="7 5"/>
+  <text x="630" y="605" font-size="13.5" font-weight="600" fill="#9f1239" text-anchor="middle">TRUST BOUNDARY — the model's output is a proposal; nothing it says is trusted until code verifies it</text>
+
+  <!-- deterministic gate -->
+  <rect x="80" y="650" width="680" height="180" rx="12" fill="#fffbeb" stroke="#f2d08a"/>
+  <text x="104" y="678" font-size="10.5" font-weight="600" fill="#a1730f" letter-spacing="1.3">save_review() · WHAT CODE ENFORCES</text>
+
+  <circle cx="116" cy="698" r="9" fill="#fbe0a8"/>
+  <text x="116" y="702" font-size="10" font-weight="700" fill="#7a5306" text-anchor="middle">1</text>
+  <text x="138" y="702" font-size="11.5" fill="#3f4a5c">Unknown rule id — the finding is rejected</text>
+
+  <circle cx="116" cy="726" r="9" fill="#fbe0a8"/>
+  <text x="116" y="730" font-size="10" font-weight="700" fill="#7a5306" text-anchor="middle">2</text>
+  <text x="138" y="730" font-size="11.5" fill="#3f4a5c">evidence_source_id must belong to this project</text>
+
+  <circle cx="116" cy="754" r="9" fill="#fbe0a8"/>
+  <text x="116" y="758" font-size="10" font-weight="700" fill="#7a5306" text-anchor="middle">3</text>
+  <text x="138" y="758" font-size="11.5" fill="#3f4a5c">Pass without a source becomes Needs Evidence</text>
+
+  <circle cx="116" cy="782" r="9" fill="#fbe0a8"/>
+  <text x="116" y="786" font-size="10" font-weight="700" fill="#7a5306" text-anchor="middle">4</text>
+  <text x="138" y="786" font-size="11.5" fill="#3f4a5c">Every configured rule must be addressed</text>
+
+  <circle cx="116" cy="810" r="9" fill="#fbe0a8"/>
+  <text x="116" y="814" font-size="10" font-weight="700" fill="#7a5306" text-anchor="middle">5</text>
+  <text x="138" y="814" font-size="11.5" fill="#3f4a5c">Regex guards: cure claim, halal claim</text>
+
+  <path d="M420 830 L420 854" stroke="#8fa0b5" stroke-width="1.6" fill="none" marker-end="url(#ar)"/>
+
+  <!-- human gate -->
+  <rect x="80" y="860" width="680" height="86" rx="12" fill="#f0fdf6" stroke="#a7e8c4"/>
+  <text x="104" y="889" font-size="14.5" font-weight="600" fill="#0f172a">Human approval gate</text>
+  <text x="104" y="911" font-size="11.5" fill="#5b6779">approve is refused unless the verdict is Pass and status is approved_pending_human</text>
+  <text x="104" y="929" font-size="11.5" fill="#5b6779">reject moves the task to escalated — a recorded outcome, not a silent retry</text>
+
+  <!-- persistence -->
+  <rect x="820" y="650" width="360" height="296" rx="12" fill="#f8fafc" stroke="#d5dde8"/>
+  <text x="842" y="680" font-size="14.5" font-weight="600" fill="#0f172a">SQLite · WAL</text>
+  <text x="842" y="702" font-size="11" fill="#8a94a6">20 tables · numbered migrations</text>
+
+  <text x="842" y="734" font-size="11" fill="#5b6779">projects · sources</text>
+  <text x="842" y="760" font-size="11" fill="#5b6779">conversations · briefs</text>
+  <text x="842" y="786" font-size="11" fill="#5b6779">plans · tasks · content_versions</text>
+  <text x="842" y="812" font-size="11" fill="#5b6779">review_runs · findings · approvals</text>
+  <text x="842" y="838" font-size="11" fill="#5b6779">audit_events · usage_records</text>
+  <text x="842" y="864" font-size="11" fill="#5b6779">generated_images</text>
+
+  <line x1="842" y1="888" x2="1158" y2="888" stroke="#e2e8f0"/>
+  <text x="842" y="910" font-size="10.5" fill="#5b6779" font-style="italic">every state change writes an audit event</text>
+
+  <text x="80" y="1000" font-size="11" fill="#8a94a6">Python standard library only — no web framework, no ORM, no build step.</text>
+</svg>

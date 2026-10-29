@@ -4,6 +4,8 @@ RekaRasa is a creator workspace that turns a product brief into marketing copy, 
 
 Built for **AI CAN DO IT — Tencent Cloud Hackathon Indonesia 2026**, Challenge C (The Creator Agent).
 
+![Architecture: three agents propose, a trust boundary separates them from the code that decides, then a human approves](docs/architecture.png)
+
 ## Why this is not a text generator with a review button
 
 Most "agent" demos ask a model to grade its own homework. That is not accountability — it is a second opinion from the same source of error. RekaRasa splits the work so that no single component can wave content through:
@@ -15,14 +17,15 @@ Most "agent" demos ask a model to grade its own homework. That is not accountabi
 | **WorkBuddy** | Runs the loop, picks the next step | No — it reads the verdict, it cannot change it |
 | **Human** | Approves | That is the point |
 
-Four checks run in `save_review()`, all of them in code, none of them in the prompt:
+Five checks run in `save_review()`, all of them in code, none of them in the prompt:
 
 1. A `rule_id` that is not in the project's rule registry cannot support a pass.
 2. A `source_id` that is not attached to this project cannot support a pass.
 3. A pass on a factual rule must cite the source that states the fact.
 4. Any configured rule the Reviewer did not address is recorded as `Needs Evidence`, never as a silent pass.
+5. A disease-cure claim or an undocumented halal claim is caught by regex even when the Reviewer says `Pass`.
 
-Two deterministic regex guards run independently of the model: a disease-cure claim and an undocumented halal claim are caught even if the Reviewer says `Pass`. That is deliberate — a rule whose pass no longer requires a citation is still enforced by code rather than by trust.
+Check 5 exists because checks 1–4 all rest on the Reviewer producing an honest finding. A rule whose pass no longer needs a citation would otherwise be enforced by trust alone, so code enforces it directly.
 
 ## The workflow
 
