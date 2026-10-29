@@ -29,13 +29,22 @@ Check 5 exists because checks 1–4 all rest on the Reviewer producing an honest
 
 ## The workflow
 
+One screen, one button. The plan is still produced, but it no longer needs a
+confirmation page before you see a draft:
+
 ```
-brief → Planner proposes → human confirms the plan → tasks
+brief → Planner proposes (and becomes tasks in the same request)
       → Writer drafts → Reviewer judges → save_review() decides
       → Pass            → human approval gate → approved
       → Fail / Needs Evidence → Writer remediation (max 3) → escalate
       → Reviewer crashed      → draft preserved, review retried, never a dead end
 ```
+
+`POST /api/plan` takes `auto_confirm`, so a caller that does not want a separate
+review screen gets its tasks back in the same response. The tasks start
+`planned` — that call drafts nothing and approves nothing. The separate
+`/api/confirm-plan` route still exists for a caller that does want to edit the
+proposal first, and both paths create tasks through the same function.
 
 Each state has exactly one meaning, and each action is legal in exactly one state. A human edit produces a `pending` version that needs a *review*, not a rewrite — so a Writer retry can never silently overwrite work a person typed.
 

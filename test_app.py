@@ -550,6 +550,36 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(any(f["result"] == "Fail" for f in halal))
         db.close()
 
+    def test_a_plan_can_auto_confirm_so_the_run_needs_no_second_screen(self):
+        # The one-step run: brief in, tasks out. Nothing is drafted and nothing
+        # is approved by this call, so the review gate stays exactly where it was.
+        cookie, csrf, owner = self.register()
+        project = self.project(owner)
+        result = planner_result(planner_task("Social media content", title="Launch post", reason="The brief asks for a social post."))
+        with patch.object(app, "llm_json", return_value=(result, {"input_tokens": 4, "output_tokens": 4})):
+            status, _, response = self.request("/api/plan", "POST", {"project_id": project, "brief": "A launch post.", "output_preferences": ["Social media content"], "auto_confirm": True}, cookie, csrf)
+        self.assertEqual(status, 201, response)
+        self.assertEqual(len(response["tasks"]), 1)
+        db = app.connect()
+        self.assertEqual(db.execute("SELECT status FROM plans WHERE id=?", (response["plan_id"],)).fetchone()[0], "confirmed")
+        self.assertEqual(db.execute("SELECT status FROM tasks WHERE id=?", (response["tasks"][0]["id"],)).fetchone()[0], "planned")
+        self.assertEqual(db.execute("SELECT count(*) FROM content_versions").fetchone()[0], 0)
+        self.assertEqual(db.execute("SELECT count(*) FROM approvals").fetchone()[0], 0)
+        db.close()
+
+    def test_auto_confirm_is_off_unless_asked_for(self):
+        cookie, csrf, owner = self.register()
+        project = self.project(owner)
+        result = planner_result(planner_task("Social media content", title="Launch post"))
+        with patch.object(app, "llm_json", return_value=(result, {"input_tokens": 4, "output_tokens": 4})):
+            status, _, response = self.request("/api/plan", "POST", {"project_id": project, "brief": "A launch post.", "output_preferences": ["Social media content"]}, cookie, csrf)
+        self.assertEqual(status, 201, response)
+        self.assertNotIn("tasks", response)
+        db = app.connect()
+        self.assertEqual(db.execute("SELECT status FROM plans WHERE id=?", (response["plan_id"],)).fetchone()[0], "proposed")
+        self.assertEqual(db.execute("SELECT count(*) FROM tasks").fetchone()[0], 0)
+        db.close()
+
     def test_a_disclaimer_about_halal_does_not_switch_the_guard_off(self):
         # The source says "sertifikasi halal: belum ada". It contains the word
         # halal and documents the opposite, so a keyword match on the source

@@ -693,6 +693,53 @@ def review_draft(db, owner: str, task: sqlite3.Row, version: sqlite3.Row, source
     return save_review(db, owner, task, version, output.get("findings", []), {s["id"] for s in sources}, sources)
 
 
+def create_tasks_from_plan(db, owner: str, plan_id: str, project_id: str, plan: dict, tasks_override: list | None = None, auto: bool = False) -> list[dict]:
+    """Create the tasks for a plan and mark that plan confirmed.
+
+    Both the confirm route and the one-step run call this, so an auto-confirmed
+    plan cannot drift from one a person confirmed by hand. The caller commits.
+    """
+    if tasks_override is not None:
+        if not isinstance(tasks_override, list) or not 1 <= len(tasks_override) <= 6:
+            raise APIError(400, "Keep one to six output tasks in the plan.", "invalid_plan")
+        normalized = []
+        seen_outputs = set()
+        for item in tasks_override:
+            if not isinstance(item, dict):
+                raise APIError(400, "Each output needs a valid format, title, angle, and goal.", "invalid_plan")
+            output_format = str(item.get("format", ""))
+            title = str(item.get("title", "")).strip()
+            angle = str(item.get("angle", "")).strip()
+            goal = str(item.get("goal", "")).strip()
+            platform = str(item.get("platform", "")).strip()
+            selection_reason = str(item.get("selection_reason", "")).strip()
+            if not output_format or len(output_format) > 120 or not title or len(title) > 120 or not angle or len(angle) > 500 or not goal or len(goal) > 500 or len(platform) > 60 or len(selection_reason) > 240:
+                raise APIError(400, "Each output needs a format, title, angle, and goal within the allowed lengths.", "invalid_plan")
+            if not platform:
+                platform = "TikTok" if output_format in ("Social video script", "TikTok short-video script") else "Marketplace" if output_format == "Marketplace description" else "General"
+            output_key = (output_format.casefold(), platform.casefold())
+            if output_key in seen_outputs:
+                raise APIError(400, "Keep each format and platform combination unique in the plan.", "invalid_plan")
+            seen_outputs.add(output_key)
+            if not selection_reason:
+                selection_reason = next((task.get("selection_reason", "") for task in plan.get("tasks", []) if task.get("title") == title and task.get("format") == output_format), "Added by the user.")
+            normalized.append({"title": title, "format": output_format, "platform": platform, "angle": angle, "goal": goal, "selection_reason": selection_reason})
+        plan["tasks"] = normalized
+    created = []
+    for item in plan["tasks"]:
+        task_id = uid()
+        item["task_id"] = task_id
+        title = str(item.get("title") or item["format"])[:120]
+        platform = str(item.get("platform") or ("TikTok" if item["format"] in ("TikTok short-video script", "Social video script") else "Marketplace" if item["format"] == "Marketplace description" else "General"))[:60]
+        angle = str(item.get("angle", ""))[:500]
+        goal = str(item.get("goal", ""))[:500]
+        db.execute("INSERT INTO tasks(id,plan_id,project_id,format,deadline,publish_at,status,remediation_count,created_at,title,platform,angle,goal) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (task_id, plan_id, project_id, item["format"], None, None, "planned", 0, now(), title, platform, angle, goal))
+        created.append({**item, "id": task_id})
+    db.execute("UPDATE plans SET body=? WHERE id=?", (json.dumps(plan, ensure_ascii=False), plan_id))
+    db.execute("UPDATE plans SET status='confirmed' WHERE id=?", (plan_id,))
+    audit(db, owner, "plan.confirmed", {"plan_id": plan_id, "tasks": [t["id"] for t in created], "auto": auto}, project_id)
+    return created
+
 def task_plan_item(db, task: sqlite3.Row) -> dict:
     row = db.execute("SELECT body FROM plans WHERE id=?", (task["plan_id"],)).fetchone()
     try:
@@ -1009,6 +1056,7 @@ def application(environ, start_response):
             project = ensure_project(db, user_id, project_id)
             preferences = data.get("output_preferences", data.get("formats", []))
             custom_format = str(data.get("custom_format", "")).strip()
+            auto_confirm = bool(data.get("auto_confirm"))
             if not brief_text or len(brief_text) > 10_000 or not isinstance(preferences, list) or len(preferences) + bool(custom_format) > 6 or any(not isinstance(x, str) or not x.strip() or len(x) > 120 for x in preferences) or len(set(preferences)) != len(preferences) or len(custom_format) > 120:
                 raise APIError(400, "Add a brief up to 10,000 characters and use up to six valid output preferences.", "invalid_brief")
             if custom_format:
@@ -1059,9 +1107,16 @@ def application(environ, start_response):
             db.execute("INSERT INTO plans VALUES(?,?,?,?,?)", (plan_id, brief_id, json.dumps(plan, ensure_ascii=False), "proposed", now()))
             db.execute("INSERT INTO messages VALUES(?,?,?,?,?)", (uid(), conversation, "assistant", json.dumps(plan, ensure_ascii=False), now()))
             audit(db, user_id, "planner.proposed", {"plan_id": plan_id}, project_id)
+            # One-step run: a caller that does not want a separate confirmation
+            # screen can have the plan become tasks immediately. The tasks still
+            # start `planned`, so this call drafts and approves nothing.
+            tasks = create_tasks_from_plan(db, user_id, plan_id, project_id, plan, auto=True) if auto_confirm else []
             db.commit()
             record_agent(user_id, None, "Planner", usage, True, summary=json.dumps(plan, ensure_ascii=False))
-            return json_response(start_response, 201, {"plan_id": plan_id, "conversation_id": conversation, "project_id": project_id, "plan": plan})
+            body = {"plan_id": plan_id, "conversation_id": conversation, "project_id": project_id, "plan": plan}
+            if auto_confirm:
+                body["tasks"] = tasks
+            return json_response(start_response, 201, body)
 
         if method == "POST" and path == "/api/confirm-plan":
             plan_id = str(data.get("plan_id", ""))
@@ -1071,46 +1126,7 @@ def application(environ, start_response):
             plan = json.loads(row["body"])
             if row["status"] != "proposed":
                 raise APIError(409, "This plan has already been confirmed.", "invalid_state")
-            if "tasks" in data:
-                proposed = data["tasks"]
-                if not isinstance(proposed, list) or not 1 <= len(proposed) <= 6:
-                    raise APIError(400, "Keep one to six output tasks in the plan.", "invalid_plan")
-                normalized = []
-                seen_outputs = set()
-                for item in proposed:
-                    if not isinstance(item, dict):
-                        raise APIError(400, "Each output needs a valid format, title, angle, and goal.", "invalid_plan")
-                    output_format = str(item.get("format", ""))
-                    title = str(item.get("title", "")).strip()
-                    angle = str(item.get("angle", "")).strip()
-                    goal = str(item.get("goal", "")).strip()
-                    platform = str(item.get("platform", "")).strip()
-                    selection_reason = str(item.get("selection_reason", "")).strip()
-                    if not output_format or len(output_format) > 120 or not title or len(title) > 120 or not angle or len(angle) > 500 or not goal or len(goal) > 500 or len(platform) > 60 or len(selection_reason) > 240:
-                        raise APIError(400, "Each output needs a format, title, angle, and goal within the allowed lengths.", "invalid_plan")
-                    if not platform:
-                        platform = "TikTok" if output_format in ("Social video script", "TikTok short-video script") else "Marketplace" if output_format == "Marketplace description" else "General"
-                    output_key = (output_format.casefold(), platform.casefold())
-                    if output_key in seen_outputs:
-                        raise APIError(400, "Keep each format and platform combination unique in the plan.", "invalid_plan")
-                    seen_outputs.add(output_key)
-                    if not selection_reason:
-                        selection_reason = next((task.get("selection_reason", "") for task in plan.get("tasks", []) if task.get("title") == title and task.get("format") == output_format), "Added by the user.")
-                    normalized.append({"title": title, "format": output_format, "platform": platform, "angle": angle, "goal": goal, "selection_reason": selection_reason})
-                plan["tasks"] = normalized
-            tasks = []
-            for item in plan["tasks"]:
-                task_id = uid()
-                item["task_id"] = task_id
-                title = str(item.get("title") or item["format"])[:120]
-                platform = str(item.get("platform") or ("TikTok" if item["format"] in ("TikTok short-video script", "Social video script") else "Marketplace" if item["format"] == "Marketplace description" else "General"))[:60]
-                angle = str(item.get("angle", ""))[:500]
-                goal = str(item.get("goal", ""))[:500]
-                db.execute("INSERT INTO tasks(id,plan_id,project_id,format,deadline,publish_at,status,remediation_count,created_at,title,platform,angle,goal) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (task_id, plan_id, row["project_id"], item["format"], None, None, "planned", 0, now(), title, platform, angle, goal))
-                tasks.append({**item, "id": task_id})
-            db.execute("UPDATE plans SET body=? WHERE id=?", (json.dumps(plan, ensure_ascii=False), plan_id))
-            db.execute("UPDATE plans SET status='confirmed' WHERE id=?", (plan_id,))
-            audit(db, user_id, "plan.confirmed", {"plan_id": plan_id, "tasks": [t["id"] for t in tasks]}, row["project_id"])
+            tasks = create_tasks_from_plan(db, user_id, plan_id, row["project_id"], plan, data.get("tasks") if "tasks" in data else None)
             db.commit()
             return json_response(start_response, 200, {"tasks": tasks})
 
