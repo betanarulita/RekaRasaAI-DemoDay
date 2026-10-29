@@ -97,11 +97,21 @@ The app creates `data/rekarasa.sqlite3`, stores image files in `data/generated-i
 ## Tests and checks
 
 ```
-python -m pytest test_app.py -q     # 46 passed
+python -m pytest test_app.py -q     # 63 passed
 python -m py_compile app.py test_app.py
+node --check static/app.js
+node probe_frontend.js              # calendar and diff behaviour
 ```
 
 Tests use fake model and image services and make no paid API calls. The live provider path was verified separately against Groq, as recorded above.
+
+`probe_frontend.js` is the only frontend check that executes code. `node --check`
+proves the file parses; it does not prove `calendarView()` runs. The probe loads
+the real functions against a stub DOM and asserts on the markup they produce,
+which is how two calendar bugs were caught: a task due and published on the same
+date counted twice in the open-count badge, and the item needing attention was
+pushed behind the "+1 more" marker. It is not a browser and makes no claim about
+layout.
 
 **Not verified:** the ComfyUI image path has only fake-service coverage — no local ComfyUI server was reachable, so `IMAGE_PROVIDER=comfyui` is exercised by tests but has not produced a real image here. There is also no public deployment URL; everything above was run locally.
 
