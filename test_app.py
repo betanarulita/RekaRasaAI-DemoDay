@@ -550,6 +550,43 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(any(f["result"] == "Fail" for f in halal))
         db.close()
 
+    def test_a_disclaimer_about_halal_does_not_switch_the_guard_off(self):
+        # The source says "sertifikasi halal: belum ada". It contains the word
+        # halal and documents the opposite, so a keyword match on the source
+        # text would disable the guard exactly when it is needed.
+        _, _, owner = self.register()
+        project_id = self.project(owner)
+        task_id, version_id = self.task(owner, project_id, content="Parfum R&N Senja sudah bersertifikat halal.", review=None)
+        sources = [{"id": "src-1", "name": "Product-Facts.md", "text": "Yang belum kami punya: sertifikasi halal: belum ada. Masih dalam proses pengajuan."}]
+        findings = [
+            {"criterion": rule_id, "result": "Pass", "claim": "", "rule_id": rule_id, "evidence_source_id": None, "explanation": "Checked.", "recommendation": "None."}
+            for rule_id in ("DEMO-CLAIM-001", "DEMO-FACT-001", "DEMO-HALAL-001", "DEMO-TONE-001")
+        ]
+        db = app.connect()
+        review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (version_id,)).fetchone(), findings, set(), sources)
+        self.assertEqual(review["verdict"], "Fail")
+        halal = [f for f in review["findings"] if f["rule_id"] == "DEMO-HALAL-001"]
+        self.assertTrue(any(f["result"] == "Fail" for f in halal))
+        db.close()
+
+    def test_a_documented_halal_certificate_lets_the_guard_stand_down(self):
+        _, _, owner = self.register()
+        project_id = self.project(owner)
+        task_id, version_id = self.task(owner, project_id, content="Parfum R&N Senja bersertifikat halal BPJPH.", review=None)
+        db = app.connect()
+        source_id = app.uid()
+        db.execute("INSERT INTO sources VALUES(?,?,?,?,?,?)", (source_id, project_id, "Certificate.md", "text/markdown", "Produk kami telah bersertifikat halal dari BPJPH, nomor sertifikat ID001.", app.now()))
+        db.commit()
+        sources = [{"id": source_id, "name": "Certificate.md", "text": "Produk kami telah bersertifikat halal dari BPJPH, nomor sertifikat ID001."}]
+        findings = [
+            {"criterion": rule_id, "result": "Pass", "claim": "", "rule_id": rule_id, "evidence_source_id": source_id, "explanation": "Checked.", "recommendation": "None."}
+            for rule_id in ("DEMO-CLAIM-001", "DEMO-FACT-001", "DEMO-HALAL-001", "DEMO-TONE-001")
+        ]
+        review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (version_id,)).fetchone(), findings, {source_id}, sources)
+        halal = [f for f in review["findings"] if f["rule_id"] == "DEMO-HALAL-001"]
+        self.assertFalse(any(f["result"] == "Fail" for f in halal))
+        db.close()
+
     def test_a_rule_id_placed_in_the_criterion_field_is_recovered(self):
         # Seen against the live provider: the model returned four Pass findings
         # with rule_id null and the id in criterion. The coverage check keys on

@@ -80,6 +80,12 @@ RULES = [
 # "checked, nothing prohibited found" has no document to point at. They stay
 # enforced by the deterministic guards in save_review(), not by trust.
 RULES_WITHOUT_EVIDENCE = {"DEMO-CLAIM-001", "DEMO-HALAL-001", "DEMO-TONE-001"}
+# A source documents halal status only when it says so in an affirmative
+# sentence. The disclaimers that matter most — "sertifikasi halal: belum ada" —
+# mention halal and document the opposite, so matching the bare keyword would
+# switch the guard off exactly when it is needed.
+HALAL_MENTION = r"\b(halal|halalan|thoyyiban|syariah|sharia)\b"
+HALAL_NEGATION = r"\b(belum|tidak|bukan|tanpa|proses|pending|not|no|without|awaiting|unverified)\b"
 RATE_WINDOW_SECONDS = 60
 RATE_MAX_REQUESTS = 8
 RATE_MAX_KEYS = 5_000
@@ -543,6 +549,19 @@ def require_review_settled(task) -> None:
         raise APIError(409, "A review is still running for this task. Wait for it to finish.", "review_in_progress")
 
 
+def halal_is_documented(sources: list[dict] | None) -> bool:
+    """True only when a source asserts halal status without negating it.
+
+    Sentence-level negation, because "halal: belum ada" and "produk bersertifikat
+    halal" differ by one word and by everything that matters.
+    """
+    for source in sources or []:
+        for sentence in re.split(r"(?<=[.!?])\s+|\n+", source.get("text", "")):
+            if re.search(HALAL_MENTION, sentence, re.I) and not re.search(HALAL_NEGATION, sentence, re.I):
+                return True
+    return False
+
+
 def save_review(db, owner: str, task: sqlite3.Row, version: sqlite3.Row, findings: list[dict], allowed_sources: set[str], sources: list[dict] | None = None) -> dict:
     known = {r["id"]: r for r in db.execute("SELECT id,version,text,requires_evidence FROM rule_registry WHERE kind='demo'").fetchall()}
     verified = []
@@ -573,17 +592,19 @@ def save_review(db, owner: str, task: sqlite3.Row, version: sqlite3.Row, finding
             raw["recommendation"] = "Attach the relevant source or revise the claim to remove unsupported details."
         verified.append({**raw, "rule_id": rule_id, "rule_version": rule["version"] if rule else None, "evidence_source_id": source_id, "invalid_reference": invalid})
 
-    def guard(rule_id: str, pattern: str, criterion: str, explanation: str, recommendation: str, source_texts: bool) -> None:
+    def guard(rule_id: str, pattern: str, criterion: str, explanation: str, recommendation: str, documented: bool = False) -> None:
         """Deterministic backstop: catches what the model should have caught.
 
         Runs regardless of the model's opinion, so a rule whose pass no longer
         needs a citation is still enforced by code rather than by trust.
+        `documented` means the attached sources already establish the claim, so
+        the guard stands down and the claim is legitimate.
         """
         if any(f["rule_id"] == rule_id and f["result"] in ("Fail", "Needs Evidence") for f in verified):
             return
         if not re.search(pattern, version["content"], re.I):
             return
-        if source_texts and any(re.search(pattern, s.get("text", ""), re.I) for s in (sources or [])):
+        if documented:
             return
         verified.append({"criterion": criterion, "result": "Fail", "claim": re.search(pattern, version["content"], re.I).group(0), "rule_id": rule_id, "rule_version": known[rule_id]["version"], "evidence_source_id": None, "explanation": explanation, "recommendation": recommendation, "invalid_reference": False})
 
@@ -595,13 +616,13 @@ def save_review(db, owner: str, task: sqlite3.Row, version: sqlite3.Row, finding
           "Unsupported cure claim",
           "A disease cure or treatment claim is present. No attached source can establish this claim under the project's demo rule.",
           "Remove the cure claim and use a non-medical product description supported by the attached sources.",
-          source_texts=False)
+          documented=False)
     guard("DEMO-HALAL-001",
           r"\b(halal|halalan|thoyyiban|syariah|sharia|sertifikasi halal)\b",
           "Undocumented halal claim",
           "A halal or sharia claim is present but no attached source documents that certification.",
           "Remove the certification claim or attach the document that establishes it.",
-          source_texts=True)
+          documented=halal_is_documented(sources))
     covered_rules = {f["rule_id"] for f in verified if f["rule_id"] in known}
     for rule_id, rule in known.items():
         if rule_id not in covered_rules:
