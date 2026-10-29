@@ -14,7 +14,7 @@ import sqlite3
 import time
 import uuid
 from collections import defaultdict, deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from pathlib import Path
@@ -71,10 +71,10 @@ LLM_MAX_ATTEMPTS = 4
 LLM_BACKOFF_SECONDS = 2.0
 PROVIDER_STATUS = "configured_unverified" if LLM_PROVIDER == "groq" and os.getenv("GROQ_API_KEY") else "unconfigured"
 RULES = [
-    ("DEMO-CLAIM-001", "1.0", "Demo: do not state or imply that a food or herbal product cures, treats, or prevents a disease without explicit, verifiable project evidence and human review. This is a demonstration rule, not legal advice."),
-    ("DEMO-FACT-001", "1.0", "Demo: product facts and measurable claims must be supported by a source attached to this project. Unsupported claims need evidence or must be removed."),
-    ("DEMO-HALAL-001", "1.0", "Demo: do not claim halal certification unless a source attached to this project documents that certification. Otherwise mark the claim Needs Evidence."),
-    ("DEMO-TONE-001", "1.0", "Demo: follow the tone and audience stated in the approved brief. Flag language that conflicts with those instructions."),
+    ("DEMO-CLAIM-001", "1.0", "Health and cure claims. Do not state or imply that a product cures, treats, prevents, or relieves a disease or a medical condition. Wording like that needs documented evidence and a human sign-off; without both it must be removed. This is project policy, not legal advice."),
+    ("DEMO-FACT-001", "1.0", "Verifiable product facts. Price, size, ingredients, materials, durability, place of origin, registration numbers, and test results must appear in a source attached to this project. A fact with no source is unsupported: remove it or attach the document that states it."),
+    ("DEMO-HALAL-001", "1.0", "Religious certification. Do not claim halal or sharia compliance unless a source attached to this project documents it. An application in progress is not a certificate, and a pending status is not a pass."),
+    ("DEMO-TONE-001", "1.0", "Brief compliance. Copy must follow the audience and tone named in the approved brief, and must avoid registers the brief rules out."),
 ]
 # Rules a Pass can satisfy without citing a source. They are prohibitions:
 # "checked, nothing prohibited found" has no document to point at. They stay
@@ -108,6 +108,16 @@ FORMAT_FLOORS = (
     ("poster", 120),
     ("hero", 120),
 )
+
+# Formats whose Writer instruction names separate copy blocks. A draft that
+# never labels them cannot be handed to a designer or a marketplace editor,
+# because nobody can tell the headline from the body copy.
+FORMAT_BLOCKS = (
+    ("poster", ("headline", "body", "cta"), 2),
+    ("static ad", ("headline", "body", "cta"), 2),
+    ("marketplace", ("title", "description"), 1),
+    ("listing", ("title", "description"), 1),
+)
 # Everything the positive prompt must not ask for. Base SD 1.5 renders text as
 # noise and follows a negation poorly, so these go here and not in the prompt.
 IMAGE_NEGATIVE_PROMPT = (
@@ -119,6 +129,13 @@ IMAGE_NEGATIVE_PROMPT = (
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+RESET_WINDOW_MINUTES = 15
+
+
+def reset_expiry() -> str:
+    return (datetime.now(timezone.utc) + timedelta(minutes=RESET_WINDOW_MINUTES)).isoformat(timespec="seconds")
 
 
 def uid() -> str:
@@ -167,6 +184,10 @@ def init_db() -> None:
     # runs before any rule exists, so its UPDATE would touch nothing. This is
     # idempotent and keeps existing databases in step too.
     db.executemany("UPDATE rule_registry SET requires_evidence=? WHERE id=?", [(0 if rule[0] in RULES_WITHOUT_EVIDENCE else 1, rule[0]) for rule in RULES])
+    # Same reason as above: rewording a rule must reach databases that already
+    # exist, and RULES stays the single source of the text. Only the wording
+    # moves; the id and the version do not, because what is enforced is the same.
+    db.executemany("UPDATE rule_registry SET text=? WHERE id=? AND version=?", [(rule[2], rule[0], rule[1]) for rule in RULES])
     db.commit()
     db.close()
 
@@ -633,6 +654,29 @@ def draft_substance_problem(db, task: sqlite3.Row, version: sqlite3.Row) -> str:
     return ""
 
 
+def draft_block_problem(task: sqlite3.Row, version: sqlite3.Row) -> str:
+    """Return why a draft is missing the copy blocks its format requires, or "".
+
+    The Writer is told to emit separate HEADLINE, BODY and CTA blocks for a
+    poster, and a product title plus a description for a marketplace listing.
+    A draft that never labels them is not a smaller deliverable, it is an
+    unusable one: the blocks have to survive the trip to the designer.
+    """
+    content = version["content"] or ""
+    label = (task["format"] or "").casefold()
+    for needle, blocks, minimum in FORMAT_BLOCKS:
+        if needle not in label:
+            continue
+        found = [b for b in blocks if re.search(rf"(?im)^[\s>*#\u2022\-\u2013\u2014]*\**\s*{b}\s*\**\s*[:\-\u2013\u2014]", content)]
+        if len(found) >= minimum:
+            return ""
+        wanted = ", ".join(b.upper() for b in blocks)
+        return (f"A {task['format']} needs labelled copy blocks ({wanted}). This draft labels "
+                f"{len(found)} of the {minimum} required, so the headline, body and call to action "
+                "cannot be told apart. Label the blocks, or generate the draft again from the brief.")
+    return ""
+
+
 def save_review(db, owner: str, task: sqlite3.Row, version: sqlite3.Row, findings: list[dict], allowed_sources: set[str], sources: list[dict] | None = None) -> dict:
     known = {r["id"]: r for r in db.execute("SELECT id,version,text,requires_evidence FROM rule_registry WHERE kind='demo'").fetchall()}
     verified = []
@@ -703,6 +747,9 @@ def save_review(db, owner: str, task: sqlite3.Row, version: sqlite3.Row, finding
     substance = draft_substance_problem(db, task, version)
     if substance:
         verified.append({"criterion": "Draft substance", "result": "Needs Evidence", "claim": "", "rule_id": None, "rule_version": "", "evidence_source_id": None, "explanation": substance, "recommendation": "Restore the missing content, or generate the draft again from the brief.", "invalid_reference": False})
+    blocks = draft_block_problem(task, version)
+    if blocks:
+        verified.append({"criterion": "Required blocks", "result": "Needs Evidence", "claim": "", "rule_id": None, "rule_version": "", "evidence_source_id": None, "explanation": blocks, "recommendation": "Ask the Writer to label the blocks this format requires.", "invalid_reference": False})
     verdict = "Pass" if all(f["result"] == "Pass" for f in verified) else "Fail" if any(f["result"] == "Fail" for f in verified) else "Needs Evidence"
     review_id = uid()
     db.execute("INSERT INTO review_runs VALUES(?,?,?,?,?)", (review_id, task["id"], version["id"], verdict, now()))
@@ -1023,6 +1070,47 @@ def application(environ, start_response):
             db.execute("DELETE FROM sessions WHERE token_hash=?", (hashlib.sha256(session[1].encode()).hexdigest(),))
             db.commit()
             return json_response(start_response, 200, {"ok": True}, [("Set-Cookie", "rr_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0")])
+        if method == "POST" and path == "/api/password/request":
+            data = read_json(environ)
+            email = str(data.get("email", "")).strip().lower()
+            if not re.fullmatch(r"[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,30}", email):
+                raise APIError(400, "Enter the email address on the account.", "invalid_email")
+            login_rate_limit(environ, email)
+            record = db.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
+            if record:
+                token = secrets.token_urlsafe(32)
+                db.execute("DELETE FROM password_resets WHERE user_id=? AND (used_at IS NOT NULL OR expires_at<?)", (record["id"], now()))
+                db.execute("INSERT INTO password_resets VALUES(?,?,?,NULL)", (hashlib.sha256(token.encode()).hexdigest(), record["id"], reset_expiry()))
+                audit(db, record["id"], "password.reset_requested", {})
+                db.commit()
+                # No mail server is configured, so the token goes to the console
+                # this server already runs in. It is deliberately not returned in
+                # the response: otherwise anyone could request a token for an
+                # address they do not own and read it straight back.
+                log.warning("password reset token for %s: %s", email, token)
+            return json_response(start_response, 202, {"ok": True, "message": f"If that email has an account, a reset token was printed in the server console. It works once and expires in {RESET_WINDOW_MINUTES} minutes."})
+        if method == "POST" and path == "/api/password/reset":
+            data = read_json(environ)
+            email = str(data.get("email", "")).strip().lower()
+            token = str(data.get("token", "")).strip()
+            password = str(data.get("password", ""))
+            if not 12 <= len(password) <= 256:
+                raise APIError(400, "Choose a password of at least 12 characters.", "invalid_credentials")
+            if not token:
+                raise APIError(400, "Paste the reset token printed in the server console.", "invalid_token")
+            login_rate_limit(environ, email or "reset")
+            digest = hashlib.sha256(token.encode()).hexdigest()
+            row = db.execute("SELECT pr.user_id, pr.expires_at, pr.used_at FROM password_resets pr JOIN users u ON u.id=pr.user_id WHERE pr.token_hash=? AND u.email=?", (digest, email)).fetchone()
+            expired = row and datetime.fromisoformat(row["expires_at"]) <= datetime.now(timezone.utc)
+            if not row or row["used_at"] or expired:
+                raise APIError(400, "That token is not valid, has expired, or was already used.", "invalid_token")
+            db.execute("UPDATE users SET password_hash=? WHERE id=?", (password_hash(password), row["user_id"]))
+            db.execute("UPDATE password_resets SET used_at=? WHERE token_hash=?", (now(), digest))
+            # Every existing session dies with the old password.
+            db.execute("DELETE FROM sessions WHERE user_id=?", (row["user_id"],))
+            audit(db, row["user_id"], "password.reset_completed", {})
+            db.commit()
+            return json_response(start_response, 200, {"ok": True})
         if not session:
             raise APIError(401, "Sign in to continue.", "unauthorized")
         if method == "GET" and path == "/api/image-file":
@@ -1362,7 +1450,7 @@ def application(environ, start_response):
             rows = db.execute("SELECT a.*,p.name AS project_name FROM audit_events a LEFT JOIN projects p ON p.id=a.project_id WHERE a.owner_id=? ORDER BY a.created_at DESC LIMIT 100", (user_id,)).fetchall()
             return json_response(start_response, 200, {"events": [dict(r) for r in rows]})
         if method == "GET" and path == "/api/rules":
-            return json_response(start_response, 200, {"rules": [dict(r) for r in db.execute("SELECT * FROM rule_registry WHERE kind='demo' ORDER BY id")], "notice": "Versioned demonstration rules only. Not legal advice or a complete compliance review."})
+            return json_response(start_response, 200, {"rules": [dict(r) for r in db.execute("SELECT * FROM rule_registry WHERE kind='demo' ORDER BY id")], "notice": "This project's review policy, versioned and inspectable. Every finding cites the rule it came from. It is not legal advice and not a complete compliance review."})
         if method == "GET" and path == "/api/usage":
             totals = db.execute("SELECT COALESCE(SUM(input_tokens),0) AS input_tokens,COALESCE(SUM(output_tokens),0) AS output_tokens,COUNT(*) AS calls FROM usage_records WHERE owner_id=?", (user_id,)).fetchone()
             return json_response(start_response, 200, dict(totals))

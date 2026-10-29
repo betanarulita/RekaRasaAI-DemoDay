@@ -672,6 +672,67 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(review["verdict"], "Needs Evidence")
         db.close()
 
+    def test_a_poster_without_labelled_blocks_cannot_pass(self):
+        # The Writer is told to emit HEADLINE, BODY and CTA blocks. A wall of
+        # prose satisfies every claim rule and still cannot be handed to a
+        # designer, because nothing says which sentence is the headline.
+        prose = "Our new shop is open. Come in, take your time, and see what we have made. " * 3
+        problem = app.draft_block_problem({"format": "Poster or static ad"}, {"content": prose})
+        self.assertIn("HEADLINE, BODY, CTA", problem)
+        self.assertIn("labels 0 of the 2 required", problem)
+
+    def test_labelled_poster_blocks_satisfy_the_block_check(self):
+        labelled = "HEADLINE: Our new shop is open\nBODY: Come in and see what we have made.\nCTA: Visit us today"
+        self.assertEqual(app.draft_block_problem({"format": "Poster or static ad"}, {"content": labelled}), "")
+
+    def test_a_marketplace_listing_needs_a_title_and_a_description(self):
+        self.assertTrue(app.draft_block_problem({"format": "Marketplace listing"}, {"content": "FreshGlow is a daily moisturiser. " * 6}))
+        self.assertEqual(app.draft_block_problem({"format": "Marketplace listing"}, {"content": "TITLE: FreshGlow\n\nDESCRIPTION: A light daily moisturiser for morning and night."}), "")
+
+    def test_a_format_without_a_block_contract_is_not_checked(self):
+        self.assertEqual(app.draft_block_problem({"format": "Social video script"}, {"content": "No labels at all, and that is fine for this format."}), "")
+
+    def test_a_reset_token_is_printed_once_and_works_once(self):
+        # No SMTP is configured, so the token goes to the server console. It is
+        # never returned in the response, or anyone could request one for an
+        # address they do not own and read it straight back.
+        self.register("reset@example.test")
+        with patch.object(app.log, "warning") as warning:
+            status, _, body = self.request("/api/password/request", "POST", {"email": "reset@example.test"})
+        self.assertEqual(status, 202, body)
+        self.assertNotIn("token", json.dumps(body).lower().replace("reset token was printed", ""))
+        message = warning.call_args.args[0]
+        token = warning.call_args.args[2]
+        self.assertIn("password reset token", message)
+        self.assertGreater(len(token), 20)
+
+        status, _, body = self.request("/api/password/reset", "POST", {"email": "reset@example.test", "token": token, "password": "brand-new-password-456"})
+        self.assertEqual(status, 200, body)
+
+        self.assertEqual(self.request("/api/login", "POST", {"email": "reset@example.test", "password": "test-password-123"})[0], 401)
+        self.assertEqual(self.request("/api/login", "POST", {"email": "reset@example.test", "password": "brand-new-password-456"})[0], 200)
+
+        # The same token cannot be spent twice.
+        status, _, body = self.request("/api/password/reset", "POST", {"email": "reset@example.test", "token": token, "password": "another-password-789"})
+        self.assertEqual(status, 400, body)
+        self.assertEqual(body["code"], "invalid_token")
+
+    def test_a_reset_for_an_unknown_address_reveals_nothing(self):
+        self.register("known@example.test")
+        with patch.object(app.log, "warning") as warning:
+            status, _, body = self.request("/api/password/request", "POST", {"email": "nobody@example.test"})
+        self.assertEqual(status, 202, body)
+        self.assertFalse(warning.called)
+
+    def test_resetting_a_password_ends_every_existing_session(self):
+        cookie, csrf, _ = self.register("session@example.test")
+        self.assertEqual(self.request("/api/projects", "GET", cookie=cookie)[0], 200)
+        with patch.object(app.log, "warning") as warning:
+            self.request("/api/password/request", "POST", {"email": "session@example.test"})
+        token = warning.call_args.args[2]
+        self.request("/api/password/reset", "POST", {"email": "session@example.test", "token": token, "password": "brand-new-password-456"})
+        self.assertEqual(self.request("/api/projects", "GET", cookie=cookie)[0], 401)
+
     def test_repeated_sign_in_attempts_are_throttled(self):
         # rate_limit() keys on a user id and sign-in has none, so login needed
         # its own limiter. Before this, a password could be guessed without
@@ -833,7 +894,8 @@ class WorkflowTests(unittest.TestCase):
         ]
         initial_draft = "FreshGlow terbukti menyembuhkan jerawat dalam 7 hari! Teruji klinis, bersertifikat halal, dan aman untuk semua jenis kulit. Teksturnya ringan dan cepat meresap."
         revised_draft = (
-            "FreshGlow adalah pelembap wajah untuk penggunaan harian. Teksturnya ringan, "
+            "TITLE: FreshGlow pelembap wajah harian\n\n"
+            "DESCRIPTION: FreshGlow adalah pelembap wajah untuk penggunaan harian. Teksturnya ringan, "
             "jadi nyaman dipakai pagi sebelum beraktivitas maupun malam sebelum tidur. "
             "Oleskan tipis dan merata ke seluruh wajah setelah membersihkan kulit, lalu "
             "biarkan sebentar sebelum memakai riasan. Simpan di tempat sejuk dan kering, "

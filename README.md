@@ -17,13 +17,15 @@ Most "agent" demos ask a model to grade its own homework. That is not accountabi
 | **WorkBuddy** | Runs the loop, picks the next step | No — it reads the verdict, it cannot change it |
 | **Human** | Approves | That is the point |
 
-Five checks run in `save_review()`, all of them in code, none of them in the prompt:
+Seven checks run in `save_review()`, all of them in code, none of them in the prompt:
 
 1. A `rule_id` that is not in the project's rule registry cannot support a pass.
 2. A `source_id` that is not attached to this project cannot support a pass.
 3. A pass on a factual rule must cite the source that states the fact.
 4. Any configured rule the Reviewer did not address is recorded as `Needs Evidence`, never as a silent pass.
 5. A disease-cure claim or an undocumented halal claim is caught by regex even when the Reviewer says `Pass`.
+6. A draft below the character floor for its format is not a deliverable, and a revision that keeps less than half of the previous draft is flagged.
+7. A poster must label HEADLINE, BODY and CTA; a marketplace listing must label a title and a description. Copy nobody can separate is copy a designer cannot use.
 
 Check 5 exists because checks 1–4 all rest on the Reviewer producing an honest finding. A rule whose pass no longer needs a citation would otherwise be enforced by trust alone, so code enforces it directly.
 
@@ -72,7 +74,7 @@ It is an adapter, not an authority. The CLI is a thin HTTP client with no rules 
 
 ## What works
 
-- Account registration and sign-in, salted PBKDF2 password hashes, expiring HTTP-only sessions, SameSite cookies, and CSRF checks on mutations.
+- Account registration and sign-in, salted PBKDF2 password hashes, expiring HTTP-only sessions, SameSite cookies, CSRF checks on mutations, per-account sign-in throttling, and a single-use password reset token delivered through the server console.
 - Per-account projects, Markdown/plain-text source material, Planner conversations, tasks, versions, reviews, findings, approvals, token usage, and audit events stored in SQLite.
 - Server-side Groq Chat Completions calls with strict JSON Schema contracts for all three roles. The server validates every response against the local contract before use.
 - A plan must be confirmed before tasks can generate drafts. Each revision creates a new immutable version; history is never overwritten.
@@ -146,7 +148,8 @@ The `DEMO-*` rules are sample product policies, not legal requirements, legal ad
 
 ## Known limits
 
-- PDF text extraction, email verification, password reset, external identity providers, multi-seat collaboration, background queues, scheduled publishing, and platform publishing are not implemented.
+- PDF text extraction, email verification, external identity providers, multi-seat collaboration, background queues, scheduled publishing, and platform publishing are not implemented.
+- Password reset works without a mail server: the server prints a single-use token to its own console and the person pastes it back. Nothing is emailed.
 - SQLite and the embedded server target one low-volume demo instance. Use managed Postgres and a production-grade job/server architecture before multi-instance or high-traffic use.
 - Model calls can fail from invalid credentials, provider limits, timeouts, malformed data, or unavailable network; the UI reports the failure and preserves a retry path where possible.
 - Estimated cost is not shown because no model pricing table is bundled. Input and output token totals are recorded when returned by Groq.
