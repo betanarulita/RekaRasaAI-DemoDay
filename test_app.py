@@ -22,6 +22,16 @@ def planner_result(*tasks, product_facts=None, missing_information=None):
     return {"objective":"Create useful content", "audience":"People interested in the product", "product_facts":product_facts or [], "constraints":[], "missing_information":missing_information or [], "tasks":list(tasks)}
 
 
+# A draft that clears the substance floor for every format these tests use.
+# Short fixtures used to pass because nothing checked that a draft was still a
+# deliverable; a one-line string is not a video script or a listing.
+SAFE_DRAFT = (
+    "Jahe Rasa is a warm ginger and honey drink mix, blended in small batches. "
+    "Mix one sachet with hot water, stir well, and serve warm. Pack size: ten sachets. "
+    "Keep the tin closed and dry after opening, and finish within two months."
+)
+
+
 class WorkflowTests(unittest.TestCase):
     def setUp(self):
         app.DB_PATH = Path(TEMP.name) / (self.id().replace(".", "_") + ".sqlite3")
@@ -61,7 +71,7 @@ class WorkflowTests(unittest.TestCase):
         db.close()
         return project_id
 
-    def task(self, owner, project_id, status="needs_revision", remediation_count=0, content="A safe draft.", approved=False, review="Fail"):
+    def task(self, owner, project_id, status="needs_revision", remediation_count=0, content=SAFE_DRAFT, approved=False, review="Fail"):
         db = app.connect()
         conv, brief, plan, task_id, version_id = [app.uid() for _ in range(5)]
         db.execute("INSERT INTO conversations VALUES(?,?,?,?,?)", (conv, owner, project_id, "Brief", app.now()))
@@ -184,7 +194,7 @@ class WorkflowTests(unittest.TestCase):
             if role == "Writer":
                 self.assertIn("HEADLINE, BODY, and CTA", system)
                 self.assertEqual(payload["this_task"]["selection_reason"], task_plan["selection_reason"])
-                return {"drafts":[{"task_id":task_id,"content":"HEADLINE: Our new shop\nBODY: Welcome to our new shop.\nCTA: Visit us today.","source_ids":[]}]}, {"input_tokens":8,"output_tokens":8}
+                return {"drafts":[{"task_id":task_id,"content":"HEADLINE: Our new shop is open\nBODY: Come in, take your time, and see what we have made. We are open every day from morning until evening, and we are happy to answer any question before you decide.\nCTA: Visit us today","source_ids":[]}]}, {"input_tokens":8,"output_tokens":8}
             return {"findings":[{"criterion":rule,"result":"Pass","claim":"","rule_id":rule,"evidence_source_id":None,"explanation":"Checked against the available brief and sources.","recommendation":"No change required."} for rule in rules]}, {"input_tokens":8,"output_tokens":8}
 
         with patch.object(app, "llm_json", side_effect=fake_writer_reviewer):
@@ -460,7 +470,7 @@ class WorkflowTests(unittest.TestCase):
     def test_demo_cure_rule_rejects_a_disease_cure_claim(self):
         _, _, owner = self.register()
         project_id = self.project(owner)
-        task_id, version_id = self.task(owner, project_id, content="Jahe ini membuat maag saya sembuh total!")
+        task_id, version_id = self.task(owner, project_id, content="Jahe ini membuat maag saya sembuh total! Saya minum satu sachet setiap pagi selama seminggu dan keluhan saya hilang. Sekarang saya selalu menyimpannya di dapur untuk seluruh keluarga.")
         db = app.connect()
         review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (version_id,)).fetchone(), [], set())
         db.commit()
@@ -514,7 +524,7 @@ class WorkflowTests(unittest.TestCase):
         # every approval impossible, which is what this test locks down.
         _, _, owner = self.register()
         project_id = self.project(owner)
-        task_id, version_id = self.task(owner, project_id, content="A warm ginger and honey drink.", review=None)
+        task_id, version_id = self.task(owner, project_id, content=SAFE_DRAFT, review=None)
         findings = [
             {"criterion": rule_id, "result": "Pass", "claim": "Checked; nothing prohibited found.", "rule_id": rule_id, "evidence_source_id": None, "explanation": "Checked against the draft.", "recommendation": "None."}
             for rule_id in ("DEMO-CLAIM-001", "DEMO-HALAL-001", "DEMO-TONE-001")
@@ -528,7 +538,7 @@ class WorkflowTests(unittest.TestCase):
     def test_a_factual_pass_still_needs_a_source(self):
         _, _, owner = self.register()
         project_id = self.project(owner)
-        task_id, version_id = self.task(owner, project_id, content="Made from ginger and honey.", review=None)
+        task_id, version_id = self.task(owner, project_id, content=SAFE_DRAFT, review=None)
         findings = [{"criterion": "Product fact", "result": "Pass", "claim": "Made from ginger and honey", "rule_id": "DEMO-FACT-001", "evidence_source_id": None, "explanation": "Supported.", "recommendation": "None."}]
         db = app.connect()
         review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (version_id,)).fetchone(), findings, set())
@@ -538,7 +548,7 @@ class WorkflowTests(unittest.TestCase):
     def test_an_undocumented_halal_claim_fails_even_when_the_model_passes_it(self):
         _, _, owner = self.register()
         project_id = self.project(owner)
-        task_id, version_id = self.task(owner, project_id, content="Jahe Rasa is halal certified and gentle on the stomach.", review=None)
+        task_id, version_id = self.task(owner, project_id, content="Jahe Rasa is halal certified and gentle on the stomach. Mix one sachet with hot water and serve warm. Pack size: ten sachets, blended in small batches in Bandung.", review=None)
         findings = [
             {"criterion": rule_id, "result": "Pass", "claim": "", "rule_id": rule_id, "evidence_source_id": None, "explanation": "Checked.", "recommendation": "None."}
             for rule_id in ("DEMO-CLAIM-001", "DEMO-FACT-001", "DEMO-HALAL-001", "DEMO-TONE-001")
@@ -586,7 +596,7 @@ class WorkflowTests(unittest.TestCase):
         # text would disable the guard exactly when it is needed.
         _, _, owner = self.register()
         project_id = self.project(owner)
-        task_id, version_id = self.task(owner, project_id, content="Parfum R&N Senja sudah bersertifikat halal.", review=None)
+        task_id, version_id = self.task(owner, project_id, content="Parfum R&N Senja sudah bersertifikat halal dan aman dipakai untuk ibadah. Botol kaca 50 ml dengan tutup magnetic, tersedia juga refill 30 ml untuk kamu yang sudah punya botolnya.", review=None)
         sources = [{"id": "src-1", "name": "Product-Facts.md", "text": "Yang belum kami punya: sertifikasi halal: belum ada. Masih dalam proses pengajuan."}]
         findings = [
             {"criterion": rule_id, "result": "Pass", "claim": "", "rule_id": rule_id, "evidence_source_id": None, "explanation": "Checked.", "recommendation": "None."}
@@ -602,7 +612,7 @@ class WorkflowTests(unittest.TestCase):
     def test_a_documented_halal_certificate_lets_the_guard_stand_down(self):
         _, _, owner = self.register()
         project_id = self.project(owner)
-        task_id, version_id = self.task(owner, project_id, content="Parfum R&N Senja bersertifikat halal BPJPH.", review=None)
+        task_id, version_id = self.task(owner, project_id, content="Parfum R&N Senja bersertifikat halal BPJPH dengan nomor sertifikat ID0012026. Botol kaca 50 ml, tutup magnetic, dan tersedia refill 30 ml untuk isi ulang.", review=None)
         db = app.connect()
         source_id = app.uid()
         db.execute("INSERT INTO sources VALUES(?,?,?,?,?,?)", (source_id, project_id, "Certificate.md", "text/markdown", "Produk kami telah bersertifikat halal dari BPJPH, nomor sertifikat ID001.", app.now()))
@@ -617,13 +627,57 @@ class WorkflowTests(unittest.TestCase):
         self.assertFalse(any(f["result"] == "Fail" for f in halal))
         db.close()
 
+    def test_a_revision_that_deletes_the_draft_cannot_pass(self):
+        # Seen in manual testing: a 371-character listing was revised into
+        # "Parfum R&N - Eau de Parfum 50ml" and all four rules passed, because
+        # a rule against unsupported facts is satisfied by having no facts.
+        _, _, owner = self.register()
+        project_id = self.project(owner)
+        task_id, _ = self.task(owner, project_id, content=SAFE_DRAFT, review=None)
+        db = app.connect()
+        hollow = app.uid()
+        db.execute("INSERT INTO content_versions VALUES(?,?,?,?,?,?,?,?)", (hollow, task_id, 2, "Parfum R&N - Eau de Parfum 50ml", "[]", "pending", 0, app.now()))
+        db.commit()
+        findings = [{"criterion": rule_id, "result": "Pass", "claim": "", "rule_id": rule_id, "evidence_source_id": None, "explanation": "Checked.", "recommendation": "None."} for rule_id, _, _ in app.RULES]
+        review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (hollow,)).fetchone(), findings, set())
+        self.assertEqual(review["verdict"], "Needs Evidence")
+        self.assertTrue([f for f in review["findings"] if f["criterion"] == "Draft substance"])
+        db.close()
+
+    def test_a_revision_that_keeps_less_than_half_is_flagged(self):
+        # Above the floor, so only the ratio against the previous version can
+        # catch it. Deleting claims is expected; deleting the deliverable is not.
+        _, _, owner = self.register()
+        project_id = self.project(owner)
+        task_id, _ = self.task(owner, project_id, content=SAFE_DRAFT * 3, review=None)
+        db = app.connect()
+        shrunk = app.uid()
+        db.execute("INSERT INTO content_versions VALUES(?,?,?,?,?,?,?,?)", (shrunk, task_id, 2, SAFE_DRAFT[:200], "[]", "pending", 0, app.now()))
+        db.commit()
+        findings = [{"criterion": rule_id, "result": "Pass", "claim": "", "rule_id": rule_id, "evidence_source_id": None, "explanation": "Checked.", "recommendation": "None."} for rule_id, _, _ in app.RULES]
+        review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (shrunk,)).fetchone(), findings, set())
+        self.assertEqual(review["verdict"], "Needs Evidence")
+        substance = [f for f in review["findings"] if f["criterion"] == "Draft substance"]
+        self.assertIn("characters", substance[0]["explanation"])
+        db.close()
+
+    def test_a_bare_title_first_draft_is_not_a_deliverable(self):
+        _, _, owner = self.register()
+        project_id = self.project(owner)
+        task_id, version_id = self.task(owner, project_id, content="Parfum R&N - Eau de Parfum 50ml", review=None)
+        db = app.connect()
+        findings = [{"criterion": rule_id, "result": "Pass", "claim": "", "rule_id": rule_id, "evidence_source_id": None, "explanation": "Checked.", "recommendation": "None."} for rule_id, _, _ in app.RULES]
+        review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (version_id,)).fetchone(), findings, set())
+        self.assertEqual(review["verdict"], "Needs Evidence")
+        db.close()
+
     def test_a_rule_id_placed_in_the_criterion_field_is_recovered(self):
         # Seen against the live provider: the model returned four Pass findings
         # with rule_id null and the id in criterion. The coverage check keys on
         # rule_id, so every rule looked unaddressed and remediation looped.
         _, _, owner = self.register()
         project_id = self.project(owner)
-        task_id, version_id = self.task(owner, project_id, content="A warm ginger and honey drink.", review=None)
+        task_id, version_id = self.task(owner, project_id, content=SAFE_DRAFT, review=None)
         findings = [{"criterion": rule_id, "result": "Pass", "claim": "", "rule_id": None, "evidence_source_id": None, "explanation": "Checked.", "recommendation": "None."} for rule_id in ("DEMO-CLAIM-001", "DEMO-FACT-001", "DEMO-HALAL-001", "DEMO-TONE-001")]
         db = app.connect()
         review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (version_id,)).fetchone(), findings, set())
@@ -714,7 +768,7 @@ class WorkflowTests(unittest.TestCase):
                 self.assertTrue(payload["this_task"]["title"])
                 self.assertTrue(payload["this_task"]["angle"])
                 self.assertTrue(payload["this_task"]["goal"])
-                content = "HOOK: A warm pause.\nSCENE 1: Show the drink.\nVOICEOVER: Ginger and honey for your afternoon.\nCTA: See product details." if payload["this_task"]["platform"] == "TikTok" else "PRODUCT TITLE: Ginger and honey drink\nDESCRIPTION: A warm drink made with ginger and honey."
+                content = "HOOK: A warm pause in the middle of your day.\nSCENE 1: Steam rising from a cup on a wooden table, morning light.\nVOICEOVER: Ginger and honey, mixed with hot water, nothing else needed.\nSCENE 2: Hands holding the cup, close on the steam.\nVOICEOVER: Ten sachets in a tin, small batches, made in Bandung.\nCTA: See product details." if payload["this_task"]["platform"] == "TikTok" else "PRODUCT TITLE: Ginger and honey drink mix\nDESCRIPTION: A warm drink made with ginger and honey. Mix one sachet with hot water, stir, and serve. Pack size: ten sachets. Blended in small batches. Keep the tin closed and dry after opening."
                 return {"drafts":[{"task_id":payload["this_task"]["id"], "content":content, "source_ids":[source]}]}, {"input_tokens": 40, "output_tokens": 35}
             return {"findings":[{"criterion":rule, "result":"Pass", "claim":"Supported product description", "rule_id":rule, "evidence_source_id":source, "explanation":"Checked against project source and brief.", "recommendation":"No change required."} for rule in rules]}, {"input_tokens": 50, "output_tokens": 25}
 
@@ -762,7 +816,13 @@ class WorkflowTests(unittest.TestCase):
             "Teksturnya ringan.",
         ]
         initial_draft = "FreshGlow terbukti menyembuhkan jerawat dalam 7 hari! Teruji klinis, bersertifikat halal, dan aman untuk semua jenis kulit. Teksturnya ringan dan cepat meresap."
-        revised_draft = "FreshGlow adalah pelembap wajah untuk penggunaan harian dengan tekstur ringan."
+        revised_draft = (
+            "FreshGlow adalah pelembap wajah untuk penggunaan harian. Teksturnya ringan, "
+            "jadi nyaman dipakai pagi sebelum beraktivitas maupun malam sebelum tidur. "
+            "Oleskan tipis dan merata ke seluruh wajah setelah membersihkan kulit, lalu "
+            "biarkan sebentar sebelum memakai riasan. Simpan di tempat sejuk dan kering, "
+            "jauh dari sinar matahari langsung."
+        )
         db = app.connect()
         source_id = app.uid()
         db.execute(

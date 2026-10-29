@@ -90,6 +90,21 @@ RATE_WINDOW_SECONDS = 60
 RATE_MAX_REQUESTS = 8
 RATE_MAX_KEYS = 5_000
 RATE_HITS: dict[str, deque[float]] = defaultdict(deque)
+# A review checks whether claims are true. Nothing checked whether the draft was
+# still a deliverable, so a remediation could delete every claim, pass every
+# rule, and hand a one-line shell to the human gate. These are the floor.
+MIN_DRAFT_CHARS = 120
+MIN_REVISION_RATIO = 0.5
+MIN_COMPARABLE_CHARS = 200
+FORMAT_FLOORS = (
+    ("marketplace", 200),
+    ("listing", 200),
+    ("video", 150),
+    ("script", 150),
+    ("bundle", 150),
+    ("poster", 120),
+    ("hero", 120),
+)
 
 
 def now() -> str:
@@ -562,6 +577,29 @@ def halal_is_documented(sources: list[dict] | None) -> bool:
     return False
 
 
+def draft_substance_problem(db, task: sqlite3.Row, version: sqlite3.Row) -> str:
+    """Return why a draft is too thin to be a deliverable, or "" when it is fine.
+
+    Two separate failures share one cause. A first draft can be a bare title;
+    a revision can delete its way to a pass, because a rule that forbids
+    unsupported facts is satisfied by having no facts at all. Neither is a
+    claim problem, so no rule catches them.
+    """
+    content = (version["content"] or "").strip()
+    label = (task["format"] or "").casefold()
+    floor = MIN_DRAFT_CHARS
+    for needle, value in FORMAT_FLOORS:
+        if needle in label:
+            floor = max(floor, value)
+            break
+    if len(content) < floor:
+        return f"This draft is {len(content)} characters. A {task['format']} deliverable needs at least {floor}, and removing content until nothing is left does not satisfy a review."
+    prior = db.execute("SELECT content FROM content_versions WHERE task_id=? AND version<? ORDER BY version DESC LIMIT 1", (task["id"], version["version"])).fetchone()
+    if prior and len(prior["content"]) >= MIN_COMPARABLE_CHARS and len(content) < MIN_REVISION_RATIO * len(prior["content"]):
+        return f"This revision kept {len(content)} of {len(prior['content'])} characters. Dropping unsupported claims is expected; dropping the deliverable is not."
+    return ""
+
+
 def save_review(db, owner: str, task: sqlite3.Row, version: sqlite3.Row, findings: list[dict], allowed_sources: set[str], sources: list[dict] | None = None) -> dict:
     known = {r["id"]: r for r in db.execute("SELECT id,version,text,requires_evidence FROM rule_registry WHERE kind='demo'").fetchall()}
     verified = []
@@ -629,6 +667,9 @@ def save_review(db, owner: str, task: sqlite3.Row, version: sqlite3.Row, finding
             verified.append({"criterion": "Rule coverage", "result": "Needs Evidence", "claim": "", "rule_id": rule_id, "rule_version": rule["version"], "evidence_source_id": None, "explanation": "The Reviewer did not return a decision for this configured rule. Missing findings cannot count as a pass.", "recommendation": "Run the review again or have a human evaluate this rule.", "invalid_reference": False})
     if not verified:
         verified.append({"criterion": "Evidence review", "result": "Needs Evidence", "claim": "", "rule_id": "DEMO-FACT-001", "rule_version": known["DEMO-FACT-001"]["version"], "evidence_source_id": None, "explanation": "The reviewer did not return findings. No automatic approval is possible.", "recommendation": "Run review again or ask a human to inspect the draft.", "invalid_reference": False})
+    substance = draft_substance_problem(db, task, version)
+    if substance:
+        verified.append({"criterion": "Draft substance", "result": "Needs Evidence", "claim": "", "rule_id": None, "rule_version": "", "evidence_source_id": None, "explanation": substance, "recommendation": "Restore the missing content, or generate the draft again from the brief.", "invalid_reference": False})
     verdict = "Pass" if all(f["result"] == "Pass" for f in verified) else "Fail" if any(f["result"] == "Fail" for f in verified) else "Needs Evidence"
     review_id = uid()
     db.execute("INSERT INTO review_runs VALUES(?,?,?,?,?)", (review_id, task["id"], version["id"], verdict, now()))
