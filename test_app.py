@@ -550,6 +550,20 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(any(f["result"] == "Fail" for f in halal))
         db.close()
 
+    def test_a_rule_id_placed_in_the_criterion_field_is_recovered(self):
+        # Seen against the live provider: the model returned four Pass findings
+        # with rule_id null and the id in criterion. The coverage check keys on
+        # rule_id, so every rule looked unaddressed and remediation looped.
+        _, _, owner = self.register()
+        project_id = self.project(owner)
+        task_id, version_id = self.task(owner, project_id, content="A warm ginger and honey drink.", review=None)
+        findings = [{"criterion": rule_id, "result": "Pass", "claim": "", "rule_id": None, "evidence_source_id": None, "explanation": "Checked.", "recommendation": "None."} for rule_id in ("DEMO-CLAIM-001", "DEMO-FACT-001", "DEMO-HALAL-001", "DEMO-TONE-001")]
+        db = app.connect()
+        review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (version_id,)).fetchone(), findings, set())
+        self.assertEqual(review["verdict"], "Pass")
+        self.assertNotIn("Rule coverage", [f["criterion"] for f in review["findings"]])
+        db.close()
+
     def test_a_rate_limited_call_is_retried_before_failing(self):
         planner = {"objective":"Introduce the drink", "audience":"Drink fans", "product_facts":[], "constraints":[], "missing_information":[], "tasks":[{"title":"A warm pause", "format":"Social video script", "platform":"TikTok", "angle":"A warm pause", "goal":"Introduce it", "selection_reason":"The brief asks for a short social video."}]}
         result = {"choices":[{"message":{"content":json.dumps(planner)}}], "usage":{"prompt_tokens":1,"completion_tokens":1}}

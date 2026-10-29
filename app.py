@@ -480,7 +480,8 @@ REVIEW_SCHEMA = schema("review", {"findings": {"type": "array", "items": schema(
 # unevidenced — which silently blocked every first pass.
 REVIEWER_INSTRUCTIONS = (
     "You are the Reviewer agent. You receive a draft, the project sources, and the configured rules. "
-    "Return exactly one finding per configured rule, in the order given, and put the rule id in the criterion field. "
+    "Return exactly one finding per configured rule, in the order given. "
+    "Set rule_id to that rule's id — the id, not the rule text — and use criterion for a short label of what you checked. "
     "For a rule that forbids something (a disease cure claim, a certification claim): if the draft contains none, "
     "return Pass with an empty claim, because an absence has nothing to cite. If it does contain one, return Fail and quote it. "
     "For a rule that requires factual support: a Pass must set evidence_source_id to the id of the source that states the fact; "
@@ -547,6 +548,12 @@ def save_review(db, owner: str, task: sqlite3.Row, version: sqlite3.Row, finding
     verified = []
     for raw in findings:
         rule_id = raw.get("rule_id")
+        # Models sometimes leave rule_id null and put the id in criterion
+        # instead. The coverage check below keys on rule_id, so an unnormalised
+        # finding looks like an unaddressed rule and blocks a legitimate pass.
+        # Recover the intent here rather than trusting the model to be tidy.
+        if not rule_id and str(raw.get("criterion", "")).strip() in known:
+            rule_id = str(raw["criterion"]).strip()
         source_id = raw.get("evidence_source_id")
         invalid = bool(rule_id and rule_id not in known) or bool(source_id and source_id not in allowed_sources)
         if invalid:

@@ -36,10 +36,10 @@ keluaran berupa JSON.
 6. **Jangan menulis konten sendiri.** Kalau Writer gagal, laporkan
    kegagalannya.
 7. **Setelah manusia menyunting draft, pakai `review-edit` — BUKAN `revise`.**
-   Ini penting: `edit` dan `revise` sama-sama menyisakan status
-   `needs_revision`, jadi `revise` akan diterima server walaupun salah.
-   Kalau kamu memanggil `revise` setelah manusia mengedit, tulisan manusia
-   akan tertimpa output Writer dan hilang dari versi terbaru.
+   `edit` menghasilkan versi `pending` yang butuh **penilaian**, bukan
+   penulisan ulang. Server kini menolak `revise` dalam kondisi itu
+   (`no_actionable_review`), tapi jangan andalkan penolakan itu sebagai jaring
+   pengaman — pilih perintah yang benar sejak awal.
 
 ## Alur standar
 
@@ -107,6 +107,8 @@ tidak bisa diaudit.
 | `provider_rate_limited` / `rate_limited` | Batas laju tercapai | Tunggu ~60 detik, ulangi **sekali**. Jangan mengulang berulang |
 | `iteration_limit` | Batas 3 remediasi tercapai | Laporkan sisa temuan, sarankan keputusan manusia |
 | `approval_blocked` | Versi terbaru belum `Pass` | Jalankan `revise` atau `review-edit`. Jangan memaksa |
+| `no_actionable_review` | Tidak ada temuan yang bisa diperbaiki | Draft hasil suntingan manusia butuh `review-edit`, bukan `revise` |
+| `review_in_progress` | Reviewer sedang berjalan untuk task ini | Tunggu, lalu muat ulang `task` |
 | `already_approved` | Versi sudah disetujui | Buat versi baru lewat `edit` bila perlu perubahan |
 | `draft_exists` | Task sudah punya draft | Jangan generate ulang; gunakan `revise` atau `edit` |
 | `review_error` | Reviewer gagal dijalankan | Ulangi dengan `review-edit` (bukan `generate`) |
