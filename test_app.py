@@ -258,7 +258,12 @@ class WorkflowTests(unittest.TestCase):
         app.init_db()
         app.init_db()
         db = app.connect()
-        self.assertEqual(db.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 3)
+        # Derived from the migrations folder, so adding a migration does not
+        # require editing this test. The point is that each file is applied
+        # exactly once and re-running is a no-op.
+        expected = max(int(path.name.split("_", 1)[0]) for path in (app.ROOT / "migrations").glob("[0-9][0-9][0-9]_*.sql"))
+        self.assertEqual(db.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], expected)
+        self.assertEqual(db.execute("SELECT count(*) FROM schema_migrations").fetchone()[0], expected)
         self.assertTrue(db.execute("SELECT 1 FROM rule_registry WHERE id='DEMO-CLAIM-001'").fetchone())
         db.close()
 
@@ -488,6 +493,69 @@ class WorkflowTests(unittest.TestCase):
         review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (version_id,)).fetchone(), [{"criterion":"Product fact", "result":"Pass", "claim":"Made from ginger", "rule_id":"DEMO-FACT-001", "evidence_source_id":None, "explanation":"Supported", "recommendation":"None"}], set())
         self.assertEqual(review["findings"][0]["result"], "Needs Evidence")
         db.close()
+
+    def test_a_prohibition_rule_can_pass_without_citing_a_source(self):
+        # "No halal claim is present" has no source to cite; demanding one made
+        # every approval impossible, which is what this test locks down.
+        _, _, owner = self.register()
+        project_id = self.project(owner)
+        task_id, version_id = self.task(owner, project_id, content="A warm ginger and honey drink.", review=None)
+        findings = [
+            {"criterion": rule_id, "result": "Pass", "claim": "Checked; nothing prohibited found.", "rule_id": rule_id, "evidence_source_id": None, "explanation": "Checked against the draft.", "recommendation": "None."}
+            for rule_id in ("DEMO-CLAIM-001", "DEMO-HALAL-001", "DEMO-TONE-001")
+        ]
+        findings.append({"criterion": "Product fact", "result": "Pass", "claim": "", "rule_id": "DEMO-FACT-001", "evidence_source_id": None, "explanation": "No product claim to support.", "recommendation": "None."})
+        db = app.connect()
+        review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (version_id,)).fetchone(), findings, set())
+        self.assertEqual(review["verdict"], "Pass")
+        db.close()
+
+    def test_a_factual_pass_still_needs_a_source(self):
+        _, _, owner = self.register()
+        project_id = self.project(owner)
+        task_id, version_id = self.task(owner, project_id, content="Made from ginger and honey.", review=None)
+        findings = [{"criterion": "Product fact", "result": "Pass", "claim": "Made from ginger and honey", "rule_id": "DEMO-FACT-001", "evidence_source_id": None, "explanation": "Supported.", "recommendation": "None."}]
+        db = app.connect()
+        review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (version_id,)).fetchone(), findings, set())
+        self.assertEqual(review["verdict"], "Needs Evidence")
+        db.close()
+
+    def test_an_undocumented_halal_claim_fails_even_when_the_model_passes_it(self):
+        _, _, owner = self.register()
+        project_id = self.project(owner)
+        task_id, version_id = self.task(owner, project_id, content="Jahe Rasa is halal certified and gentle on the stomach.", review=None)
+        findings = [
+            {"criterion": rule_id, "result": "Pass", "claim": "", "rule_id": rule_id, "evidence_source_id": None, "explanation": "Checked.", "recommendation": "None."}
+            for rule_id in ("DEMO-CLAIM-001", "DEMO-FACT-001", "DEMO-HALAL-001", "DEMO-TONE-001")
+        ]
+        db = app.connect()
+        review = app.save_review(db, owner, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone(), db.execute("SELECT * FROM content_versions WHERE id=?", (version_id,)).fetchone(), findings, set(), [])
+        self.assertEqual(review["verdict"], "Fail")
+        halal = [f for f in review["findings"] if f["rule_id"] == "DEMO-HALAL-001"]
+        self.assertTrue(any(f["result"] == "Fail" for f in halal))
+        db.close()
+
+    def test_a_rate_limited_call_is_retried_before_failing(self):
+        planner = {"objective":"Introduce the drink", "audience":"Drink fans", "product_facts":[], "constraints":[], "missing_information":[], "tasks":[{"title":"A warm pause", "format":"Social video script", "platform":"TikTok", "angle":"A warm pause", "goal":"Introduce it", "selection_reason":"The brief asks for a short social video."}]}
+        result = {"choices":[{"message":{"content":json.dumps(planner)}}], "usage":{"prompt_tokens":1,"completion_tokens":1}}
+
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *_): return False
+            def read(self, _limit): return json.dumps(result).encode()
+
+        attempts = []
+
+        def fake_urlopen(request, timeout=None):
+            attempts.append(request.full_url)
+            if len(attempts) == 1:
+                raise HTTPError(request.full_url, 429, "Too Many Requests", {}, io.BytesIO(b"{}"))
+            return FakeResponse()
+
+        with patch.dict(os.environ, {"GROQ_API_KEY":"test-only-key"}), patch.object(app, "urlopen", side_effect=fake_urlopen), patch.object(app, "LLM_BACKOFF_SECONDS", 0):
+            parsed, _ = app.llm_json("Planner", "Plan only", {"brief":"A ginger drink"}, app.PLAN_SCHEMA)
+        self.assertEqual(parsed, planner)
+        self.assertEqual(len(attempts), 2)
 
     def test_three_remediations_is_a_hard_server_limit(self):
         cookie, csrf, owner = self.register()
@@ -728,6 +796,75 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(reopened.execute("SELECT count(*) FROM content_versions WHERE task_id=?", (task_id,)).fetchone()[0], 1)
         self.assertEqual(reopened.execute("SELECT count(*) FROM audit_events WHERE event='test.persisted'").fetchone()[0], 1)
         reopened.close()
+
+
+    # --- Task lifecycle guards ---------------------------------------------
+    # These lock the difference between "the review failed" and "a human
+    # edited the draft". Both used to leave the task in needs_revision, which
+    # let a Writer retry silently overwrite the human's work.
+
+    def test_revise_is_refused_after_a_human_edit(self):
+        cookie, csrf, owner = self.register()
+        project_id = self.project(owner)
+        task_id, _ = self.task(owner, project_id, status="needs_revision", review="Fail")
+        status, _, edited = self.request("/api/edit", "POST", {"task_id": task_id, "content": "Human rewrite."}, cookie, csrf)
+        self.assertEqual(status, 201, edited)
+        status, _, body = self.request("/api/revise", "POST", {"task_id": task_id}, cookie, csrf)
+        self.assertEqual(status, 409, body)
+        self.assertEqual(body["code"], "no_actionable_review")
+        db = app.connect()
+        latest = db.execute("SELECT content FROM content_versions WHERE task_id=? ORDER BY version DESC LIMIT 1", (task_id,)).fetchone()
+        self.assertEqual(latest["content"], "Human rewrite.")
+        self.assertEqual(db.execute("SELECT count(*) FROM content_versions WHERE task_id=?", (task_id,)).fetchone()[0], 2)
+        db.close()
+
+    def test_edit_is_refused_while_a_review_is_running(self):
+        cookie, csrf, owner = self.register()
+        project_id = self.project(owner)
+        task_id, _ = self.task(owner, project_id, status="reviewing")
+        status, _, body = self.request("/api/edit", "POST", {"task_id": task_id, "content": "Too early."}, cookie, csrf)
+        self.assertEqual(status, 409, body)
+        self.assertEqual(body["code"], "review_in_progress")
+
+    def test_review_error_is_retried_without_creating_a_version(self):
+        cookie, csrf, owner = self.register()
+        project_id = self.project(owner)
+        task_id, version_id = self.task(owner, project_id, status="needs_revision", review=None)
+        db = app.connect()
+        db.execute("UPDATE content_versions SET review_status='review_error' WHERE id=?", (version_id,))
+        db.commit()
+        db.close()
+        findings = [{"criterion": rule_id, "result": "Pass", "claim": "", "rule_id": rule_id, "evidence_source_id": None, "explanation": "No claim to check.", "recommendation": "None."} for rule_id, _, _ in app.RULES]
+        with patch.object(app, "llm_json", return_value=({"findings": findings}, {"input_tokens": 1, "output_tokens": 1})):
+            status, _, body = self.request("/api/review-edit", "POST", {"task_id": task_id}, cookie, csrf)
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["review"]["verdict"], "Pass")
+        self.assertEqual(body["task"]["status"], "approved_pending_human")
+        db = app.connect()
+        self.assertEqual(db.execute("SELECT count(*) FROM content_versions WHERE task_id=?", (task_id,)).fetchone()[0], 1)
+        db.close()
+
+    def test_an_approved_task_cannot_be_rejected(self):
+        cookie, csrf, owner = self.register()
+        project_id = self.project(owner)
+        task_id, _ = self.task(owner, project_id, status="human_approved", approved=True, review="Pass")
+        status, _, body = self.request("/api/reject", "POST", {"task_id": task_id}, cookie, csrf)
+        self.assertEqual(status, 409, body)
+        self.assertEqual(body["code"], "already_approved")
+        db = app.connect()
+        self.assertEqual(db.execute("SELECT status FROM tasks WHERE id=?", (task_id,)).fetchone()[0], "human_approved")
+        db.close()
+
+    def test_readiness_tracks_provider_configuration(self):
+        status, _, body = self.request("/api/ready")
+        self.assertEqual(body["ready"], app.provider_configured())
+        self.assertEqual(status, 200 if body["ready"] else 503)
+        self.assertIn("database", body)
+
+    def test_health_does_not_depend_on_the_provider(self):
+        status, _, body = self.request("/api/health")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "ok")
 
 
 if __name__ == "__main__":
