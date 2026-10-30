@@ -82,6 +82,7 @@ It is an adapter, not an authority. The CLI is a thin HTTP client with no rules 
 - Content Studio can generate and persist a PNG per task through OpenAI Images or a local ComfyUI server.
 - Planner list and calendar views; production deadlines and planned publication times are separate fields. No publishing integration is configured and the app never reports a publication.
 - Plain text and Markdown upload, capped at 250 KB. PDF extraction is not implemented.
+- A data disclosure at `GET /api/privacy` and in Settings that names which fields reach the text and image providers, which never do, what is retained, and what is still missing. It is an honest disclosure, not a privacy policy.
 
 ## Local development
 
@@ -97,7 +98,7 @@ The app creates `data/rekarasa.sqlite3`, stores image files in `data/generated-i
 ## Tests and checks
 
 ```
-python -m pytest test_app.py -q     # 63 passed
+python -m pytest test_app.py -q     # 66 passed
 python -m py_compile app.py test_app.py
 node --check static/app.js
 node probe_frontend.js              # calendar and diff behaviour

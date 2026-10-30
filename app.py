@@ -767,6 +767,69 @@ def demo_rules(db) -> list[dict]:
     return [dict(r) for r in db.execute("SELECT id,version,text FROM rule_registry WHERE kind='demo' ORDER BY id")]
 
 
+def privacy_disclosure() -> dict:
+    """What this build stores, and what it sends to a model provider.
+
+    Written to be checkable rather than reassuring: every claim here mirrors
+    the payloads built in /api/plan, /api/generate and review_draft(). If those
+    payloads change, this function has to change with them, and the test
+    `test_privacy_disclosure_matches_what_the_model_receives` guards that.
+    """
+    return {
+        "summary": (
+            "Your account and creative work live in this application's own SQLite database. "
+            "Brief, source and draft text is sent to the configured text model so it can plan, "
+            "write and review. Your email, password, session cookie and CSRF token are never "
+            "part of that request."
+        ),
+        "stored_locally": [
+            {"item": "Account", "detail": "Email address and a salted PBKDF2 password hash. The password itself is never stored."},
+            {"item": "Session", "detail": "A SHA-256 hash of the session token in the database, plus an HttpOnly, SameSite=Strict cookie in your browser."},
+            {"item": "Creative work", "detail": "Projects, sources, briefs, plans, tasks, drafts, reviews, findings and approvals."},
+            {"item": "Record", "detail": "Audit events, agent runs, and token usage counts."},
+        ],
+        "sent_to_text_model": {
+            "provider": LLM_PROVIDER,
+            "fields": [
+                "the brief, audience and tone",
+                "attached source text",
+                "the draft being reviewed or revised",
+                "review findings from the previous round",
+                "internal task and source identifiers (random UUIDs, not your account id)",
+            ],
+            "never_sent": ["email address", "password", "session cookie", "CSRF token", "account id"],
+            "note": "The provider sees the creative text it needs. It does not see who you are.",
+        },
+        "sent_to_image_model": {
+            "provider": IMAGE_PROVIDER,
+            "fields": ["an image prompt built from the brief and a short source summary"],
+            "never_sent": ["email address", "password", "session cookie"],
+        },
+        "retention": {
+            "automatic_deletion": False,
+            "detail": (
+                "Expired sessions are deleted when you next sign in. Everything else stays until an "
+                "operator removes the database. Drafts, reviews and audit events do not expire on their own."
+            ),
+        },
+        "your_controls": [
+            "Sign out ends this session and deletes its token.",
+            "Approved drafts can be copied or downloaded as Markdown.",
+            "Audit events are readable through the API.",
+        ],
+        "not_provided": [
+            "Account self-deletion",
+            "A one-click export of all account data",
+            "Email delivery (password reset tokens print to the server console)",
+            "A signed data processing agreement with the provider",
+        ],
+        "notice": (
+            "This is an honest disclosure for a hackathon build, not a legal privacy policy. "
+            "It is not legal advice and does not claim UU PDP compliance."
+        ),
+    }
+
+
 def store_draft(db, task: sqlite3.Row, content: str, source_ids: list[str], attempt: int | None = None) -> tuple[str, int]:
     """Save a new version and move the task into review.
 
@@ -1451,6 +1514,10 @@ def application(environ, start_response):
             return json_response(start_response, 200, {"events": [dict(r) for r in rows]})
         if method == "GET" and path == "/api/rules":
             return json_response(start_response, 200, {"rules": [dict(r) for r in db.execute("SELECT * FROM rule_registry WHERE kind='demo' ORDER BY id")], "notice": "This project's review policy, versioned and inspectable. Every finding cites the rule it came from. It is not legal advice and not a complete compliance review."})
+        if method == "GET" and path == "/api/privacy":
+            if not user_id:
+                raise APIError(401, "Sign in to continue.", "unauthorized")
+            return json_response(start_response, 200, privacy_disclosure())
         if method == "GET" and path == "/api/usage":
             totals = db.execute("SELECT COALESCE(SUM(input_tokens),0) AS input_tokens,COALESCE(SUM(output_tokens),0) AS output_tokens,COUNT(*) AS calls FROM usage_records WHERE owner_id=?", (user_id,)).fetchone()
             return json_response(start_response, 200, dict(totals))

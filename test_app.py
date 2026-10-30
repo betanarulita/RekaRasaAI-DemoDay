@@ -1100,6 +1100,44 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(body["status"], "ok")
 
+    def test_privacy_disclosure_requires_a_sign_in(self):
+        status, _, body = self.request("/api/privacy")
+        self.assertEqual(status, 401)
+        self.assertEqual(body["code"], "unauthorized")
+
+    def test_privacy_disclosure_names_providers_and_exclusions(self):
+        cookie, _, _owner = self.register("privacy-owner@example.test")
+        status, _, body = self.request("/api/privacy", cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(body["sent_to_text_model"]["provider"], app.LLM_PROVIDER)
+        never = " ".join(body["sent_to_text_model"]["never_sent"]).lower()
+        for expected in ("email", "password", "session", "csrf", "account"):
+            self.assertIn(expected, never)
+        self.assertFalse(body["retention"]["automatic_deletion"])
+        self.assertTrue(any("self-deletion" in item.lower() for item in body["not_provided"]))
+        self.assertNotIn("privacy-owner@example.test", json.dumps(body))
+
+    def test_planner_request_never_carries_login_credentials(self):
+        cookie, csrf, owner = self.register("credential-owner@example.test")
+        project_id = self.project(owner)
+        planner = planner_result(planner_task("Social video script"))
+        result = {"choices": [{"message": {"content": json.dumps(planner)}}], "usage": {}}
+
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *_): return False
+            def read(self, _limit): return json.dumps(result).encode()
+
+        with patch.dict(os.environ, {"GROQ_API_KEY": "test-only-key"}), patch.object(app, "urlopen", return_value=FakeResponse()) as fake:
+            status, _, body = self.request("/api/plan", "POST", {"project_id": project_id, "brief": "Launch a ginger drink for the demo", "audience": "drink fans", "tone": "warm"}, cookie=cookie, csrf=csrf)
+        self.assertIn(status, (200, 201), body)
+        sent = fake.call_args.args[0].data.decode()
+        self.assertNotIn("credential-owner@example.test", sent)
+        self.assertNotIn("test-password-123", sent)
+        self.assertNotIn("rr_session", sent)
+        self.assertNotIn("X-CSRF", sent)
+        self.assertIn("Launch a ginger drink for the demo", sent)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
