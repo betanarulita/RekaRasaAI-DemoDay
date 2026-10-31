@@ -1,0 +1,24 @@
+Percobaan 2/3
+
+Task   : Marketplace Listing Draft (Marketplace listing / General)
+Status : approved_pending_human
+Remediasi terpakai: 2/3
+Versi  : 3
+  v3 · review_status=pass · approved=False
+  --- draft terbaru ---
+  TITLE: Jahe Rasa Warm Ginger & Honey Drink Mix – 10 Sachets
+  
+  DESCRIPTION:
+  - Natural blend of ginger and honey.
+  - 10 convenient sachets—mix one with hot water.
+  - Ready-to-mix: just add hot water for a warm beverage.
+  --- temuan ---
+  Verdict: Pass
+  [Pass] DEMO-CLAIM-001
+      Draft contains no health or cure claims.
+  [Pass] DEMO-FACT-001
+      All product facts in the draft are supported by the cited source.
+  [Pass] DEMO-HALAL-001
+      Draft does not claim halal or sharia compliance.
+  [Pass] DEMO-TONE-001
+      Draft tone aligns with the brief’s requirements.

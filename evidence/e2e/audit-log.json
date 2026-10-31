@@ -1,0 +1,104 @@
+{
+  "events": [
+    {
+      "id": "581f42f1-7f6c-44aa-a123-61fa32e29c7c",
+      "owner_id": "1b69b839-45f4-4212-ad27-91a3120a207b",
+      "project_id": "250a8d01-f477-419b-b0b4-14821bd553aa",
+      "task_id": "1b6613ea-cc2e-4643-9424-b119ac27c661",
+      "event": "human.approved",
+      "details": "{\"version_id\": \"249be5ff-3683-483e-809e-5f450a1ec3e1\", \"note\": \"Disetujui setelah meninjau v3\"}",
+      "created_at": "2026-10-31T10:11:53+00:00",
+      "project_name": "Demo · Jahe Rasa"
+    },
+    {
+      "id": "7225229a-5e7a-4090-86d9-817d26329b1a",
+      "owner_id": "1b69b839-45f4-4212-ad27-91a3120a207b",
+      "project_id": "250a8d01-f477-419b-b0b4-14821bd553aa",
+      "task_id": "1b6613ea-cc2e-4643-9424-b119ac27c661",
+      "event": "review.completed",
+      "details": "{\"review_id\": \"2cc044fe-f96e-44d5-bdef-67015dadbb22\", \"verdict\": \"Pass\", \"version\": 3}",
+      "created_at": "2026-10-31T10:11:48+00:00",
+      "project_name": "Demo · Jahe Rasa"
+    },
+    {
+      "id": "bf961b1c-6749-4450-8c02-fa6b345dc82e",
+      "owner_id": "1b69b839-45f4-4212-ad27-91a3120a207b",
+      "project_id": "250a8d01-f477-419b-b0b4-14821bd553aa",
+      "task_id": "1b6613ea-cc2e-4643-9424-b119ac27c661",
+      "event": "writer.remediated",
+      "details": "{\"attempt\": 2, \"max_attempts\": 3, \"version_id\": \"249be5ff-3683-483e-809e-5f450a1ec3e1\"}",
+      "created_at": "2026-10-31T10:11:48+00:00",
+      "project_name": "Demo · Jahe Rasa"
+    },
+    {
+      "id": "a39967fc-338c-4143-abb9-42ee4b1c73c5",
+      "owner_id": "1b69b839-45f4-4212-ad27-91a3120a207b",
+      "project_id": "250a8d01-f477-419b-b0b4-14821bd553aa",
+      "task_id": "1b6613ea-cc2e-4643-9424-b119ac27c661",
+      "event": "review.completed",
+      "details": "{\"review_id\": \"26449095-8dc9-4544-af8e-0f91c67e1cc6\", \"verdict\": \"Needs Evidence\", \"version\": 2}",
+      "created_at": "2026-10-31T10:11:36+00:00",
+      "project_name": "Demo · Jahe Rasa"
+    },
+    {
+      "id": "254db56a-e3d0-4bc3-a8db-f98060444eca",
+      "owner_id": "1b69b839-45f4-4212-ad27-91a3120a207b",
+      "project_id": "250a8d01-f477-419b-b0b4-14821bd553aa",
+      "task_id": "1b6613ea-cc2e-4643-9424-b119ac27c661",
+      "event": "writer.remediated",
+      "details": "{\"attempt\": 1, \"max_attempts\": 3, \"version_id\": \"4d3c27e4-4369-482a-a238-6393febfa6d6\"}",
+      "created_at": "2026-10-31T10:11:36+00:00",
+      "project_name": "Demo · Jahe Rasa"
+    },
+    {
+      "id": "74ca364a-ba93-467a-a054-67d7a98173c6",
+      "owner_id": "1b69b839-45f4-4212-ad27-91a3120a207b",
+      "project_id": "250a8d01-f477-419b-b0b4-14821bd553aa",
+      "task_id": "1b6613ea-cc2e-4643-9424-b119ac27c661",
+      "event": "review.completed",
+      "details": "{\"review_id\": \"bb3b5032-c174-4199-b633-bc517dc3143b\", \"verdict\": \"Needs Evidence\", \"version\": 1}",
+      "created_at": "2026-10-31T10:11:28+00:00",
+      "project_name": "Demo · Jahe Rasa"
+    },
+    {
+      "id": "6bf959b6-799f-4491-851d-1b176ab2d853",
+      "owner_id": "1b69b839-45f4-4212-ad27-91a3120a207b",
+      "project_id": "250a8d01-f477-419b-b0b4-14821bd553aa",
+      "task_id": "1b6613ea-cc2e-4643-9424-b119ac27c661",
+      "event": "writer.draft_created",
+      "details": "{\"version_id\": \"66f15fb1-fc48-4671-9f49-bd53e1968843\", \"version\": 1}",
+      "created_at": "2026-10-31T10:11:28+00:00",
+      "project_name": "Demo · Jahe Rasa"
+    },
+    {
+      "id": "481499be-1e5a-455b-b5a4-fea2563f9f85",
+      "owner_id": "1b69b839-45f4-4212-ad27-91a3120a207b",
+      "project_id": "250a8d01-f477-419b-b0b4-14821bd553aa",
+      "task_id": null,
+      "event": "plan.confirmed",
+      "details": "{\"plan_id\": \"3443f2b1-870b-4e7e-baf0-f13cf9f1e4b2\", \"tasks\": [\"1b6613ea-cc2e-4643-9424-b119ac27c661\", \"4d7d6188-3dec-4e7f-8084-cd1fb25f1c25\"], \"auto\": false}",
+      "created_at": "2026-10-31T10:11:16+00:00",
+      "project_name": "Demo · Jahe Rasa"
+    },
+    {
+      "id": "bdd07e00-0239-48e5-8fbc-e0129016d57d",
+      "owner_id": "1b69b839-45f4-4212-ad27-91a3120a207b",
+      "project_id": "250a8d01-f477-419b-b0b4-14821bd553aa",
+      "task_id": null,
+      "event": "planner.proposed",
+      "details": "{\"plan_id\": \"3443f2b1-870b-4e7e-baf0-f13cf9f1e4b2\"}",
+      "created_at": "2026-10-31T10:11:10+00:00",
+      "project_name": "Demo · Jahe Rasa"
+    },
+    {
+      "id": "b514cbfc-9576-47c2-80bd-a51e1e2e7dd3",
+      "owner_id": "1b69b839-45f4-4212-ad27-91a3120a207b",
+      "project_id": "250a8d01-f477-419b-b0b4-14821bd553aa",
+      "task_id": null,
+      "event": "account.created",
+      "details": "{\"demo_project_seeded\": true}",
+      "created_at": "2026-10-31T10:10:55+00:00",
+      "project_name": "Demo · Jahe Rasa"
+    }
+  ]
+}

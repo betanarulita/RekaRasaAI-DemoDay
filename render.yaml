@@ -22,13 +22,33 @@ services:
       - key: MODEL
         value: openai/gpt-oss-20b
       - key: IMAGE_PROVIDER
-        value: openai
+        value: pollinations
       - key: OPENAI_API_KEY
         sync: false
       - key: IMAGE_MODEL
-        value: gpt-image-2.5-sunburst
+        value: flux
+      - key: POLLINATIONS_TIMEOUT
+        value: "120"
       - key: IMAGE_STORAGE_PATH
         value: /var/data/generated-images
+      - key: LOG_LEVEL
+        value: INFO
+      - key: SENTRY_DSN
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        value: noreply@rekarasa.ai
+      - key: APP_BASE_URL
+        sync: false
+      - key: EMAIL_VERIFICATION_REQUIRED
+        value: "false"
     disk:
       name: rekarasa-data
       mountPath: /var/data

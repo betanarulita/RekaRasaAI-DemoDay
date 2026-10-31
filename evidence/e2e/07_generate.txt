@@ -1,0 +1,25 @@
+Task   : Marketplace Listing Draft (Marketplace listing / General)
+Status : needs_revision
+Remediasi terpakai: 0/3
+Versi  : 1
+  v1 · review_status=needs_evidence · approved=False
+  --- draft terbaru ---
+  Product Title: Jahe Rasa Warm Ginger & Honey Drink Mix
+  
+  Marketplace Description:
+  - Natural ginger and honey blend for a comforting warm beverage.
+  - 10 convenient sachets—mix one with hot water anytime.
+  - Quick, on-the-go preparation for busy, health-conscious adults.
+  - Ideal for a soothing, wholesome drink anytime you need a moment of calm.
+  --- temuan ---
+  Verdict: Needs Evidence
+  [Pass] DEMO-CLAIM-001
+      The draft does not contain any statements implying disease cure or medical benefit.
+  [Pass] DEMO-FACT-001
+      All facts in the draft—ingredients, pack size, and preparation—are supported by the cited source.
+  [Pass] DEMO-HALAL-001
+      The draft makes no halal or sharia compliance claim.
+  [Pass] DEMO-TONE-001
+      The tone aligns with the brief: warm, natural, trustworthy.
+  [Needs Evidence] —
+      A Marketplace listing needs labelled copy blocks (TITLE, DESCRIPTION). This draft labels 0 of the 1 required, so the headline, body and call to action cannot be told apart. Label t

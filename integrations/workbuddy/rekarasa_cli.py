@@ -440,6 +440,19 @@ def cmd_usage(args) -> None:
     )
 
 
+def cmd_holidays(args) -> None:
+    data = call("GET", "/api/holidays")
+    holidays = data.get("holidays", [])
+    if not holidays:
+        emit(data, "Tidak ada hari besar dalam 30 hari ke depan.")
+        return
+    lines = [f"Hari besar Indonesia (30 hari ke depan): {len(holidays)}"]
+    for h in holidays:
+        relative = "hari ini" if h.get("days_until") == 0 else f"{h.get('days_until')} hari lagi"
+        lines.append(f"  {h.get('date')}  {h.get('name')}  [{h.get('type')}]  ({relative})")
+    emit(data, "\n".join(lines))
+
+
 def cmd_home(args) -> None:
     data = call("GET", "/api/home")
     counts = data.get("counts", {})
@@ -510,12 +523,18 @@ def cmd_generate_image(args) -> None:
     body = {"task_id": args.task, "prompt": args.prompt, "ratio": args.ratio}
     data = call("POST", "/api/generate-image", body)
     image = data.get("image", {})
+    note = ""
+    if data.get("prompt_filtered"):
+        # Tell the caller instead of letting them assume their full direction
+        # reached the model. The stored prompt shows exactly what replaced it.
+        note = "\nCatatan: sebagian arahan prompt difilter sebagai instruksi sistem. Lihat prompt tersimpan untuk teks final."
     emit(
         data,
         f"Gambar dibuat: {image.get('id')}\n"
         f"provider/model: {image.get('provider')}/{image.get('model')}\n"
         f"ukuran: {image.get('size')}\n"
-        f"URL   : {image.get('media_url')}",
+        f"URL   : {image.get('media_url')}"
+        f"{note}",
     )
 
 
@@ -560,6 +579,7 @@ def build_parser() -> argparse.ArgumentParser:
     add("home", "Ringkasan task & hitungan status").set_defaults(func=cmd_home)
     add("rules", "Registry aturan demo").set_defaults(func=cmd_rules)
     add("usage", "Pemakaian token").set_defaults(func=cmd_usage)
+    add("holidays", "Hari besar Indonesia (30 hari ke depan)").set_defaults(func=cmd_holidays)
 
     p = add("project-create", "Buat proyek baru")
     p.add_argument("--name", required=True)
@@ -625,7 +645,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--task", required=True)
     p.set_defaults(func=cmd_images)
 
-    p = add("generate-image", "Buat aset gambar (OpenAI/ComfyUI)")
+    p = add("generate-image", "Buat aset gambar (Pollinations/ComfyUI/OpenAI)")
     p.add_argument("--task", required=True)
     p.add_argument("--prompt", required=True)
     p.add_argument("--ratio", default="square", choices=["square", "portrait", "story"])

@@ -1,0 +1,26 @@
+plan_id: 3443f2b1-870b-4e7e-baf0-f13cf9f1e4b2
+conversation_id: 76befc0e-7589-4125-8455-97c5ebc5cb80
+
+Objective : Launch marketing content for Jahe Rasa ginger honey drink targeting Indonesian consumers aged 20-35.
+Audience  : Dewasa muda 20-35 tahun
+Fakta didukung sumber (4):
+  - Jahe Rasa is a warm ginger and honey drink mix
+  - Ingredients: ginger and honey
+  - Pack size: 10 sachets
+  - Preparation: mix one sachet with hot water
+Informasi yang belum ada:
+  ! Price
+  ! Brand story
+  ! Packaging design
+  ! Distribution channel
+  ! Some suggested product details were not found in the brief or project sources; provide evidence before relying on them.
+
+Deliverable (2):
+  1. Marketplace Listing Draft — Marketplace listing / General
+     angle : Highlight natural ingredients and convenient on-the-go preparation
+     goal  : Convert viewers into buyers through compelling copy
+     alasan: User requested marketplace listing
+  2. Short-Form Video Script — Short-form video script / TikTok
+     angle : Show quick, natural preparation, highlight warmth
+     goal  : Increase brand awareness and drive traffic to listing
+     alasan: User requested short-form video script

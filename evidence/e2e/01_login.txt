@@ -1,0 +1,2 @@
+Login berhasil sebagai e2e@rekarasa.ai.
+Sesi disimpan di C:\Users\Beta\AppData\Local\Temp\e2e_session.json

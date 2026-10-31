@@ -1,5 +1,12 @@
 # FreshGlow — Publication Gate Status
 
+> **Superseded (2026-10-31).** Dokumen ini mencatat sesi 28 Oktober di mana approval masih
+> **SIMULASI melalui percakapan** — tidak ada tombol approve, tidak ada audit log, dan alur
+> belum pernah diselesaikan lewat kode. Untuk bukti yang dihasilkan sistem sebenarnya
+> (CLI → HTTP API → gate yang ditegakkan kode, lengkap dengan audit trail), lihat
+> [`E2E_WorkBuddy_Flow_2026-10-31.md`](E2E_WorkBuddy_Flow_2026-10-31.md).
+> Dokumen ini dipertahankan sebagai catatan historis, bukan bukti kesiapan.
+
 **Tujuan tes:** membuktikan bahwa persetujuan Reviewer TIDAK otomatis menjadi izin publikasi.
 
 **Waktu status ditetapkan:** 28 Oktober 2026, 22:10 (GMT+7)

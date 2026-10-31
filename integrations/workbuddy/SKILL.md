@@ -48,8 +48,9 @@ keluaran berupa JSON.
 python rekarasa_cli.py whoami --human
 python rekarasa_cli.py rules --human
 python rekarasa_cli.py projects --human
+python rekarasa_cli.py holidays --human   # hari besar Indonesia (30 hari)
 
-# 1. Planner
+# 1. Planner (otomatis menerima konteks hari besar)
 python rekarasa_cli.py plan --project <PROJECT_ID> --brief "<brief pengguna>" \
   --audience "<audiens>" --tone "<tone>" --human
 
@@ -81,7 +82,8 @@ python rekarasa_cli.py audit --out audit-log.json --human
 | `home` | Hitungan status: perlu revisi / menunggu approval / disetujui |
 | `set-dates --task <id> --deadline ... --publish-at ...` | Tanggal task |
 | `images --task <id>` | Daftar aset gambar yang tersimpan |
-| `generate-image --task <id> --prompt "..." --ratio square` | Buat aset gambar |
+| `generate-image --task <id> --prompt "..." --ratio square` | Buat aset gambar (Pollinations/Flux — gratis, tanpa API key) |
+| `holidays` | Hari besar Indonesia 30 hari ke depan (nasional + keagamaan) |
 | `usage` | Pemakaian token |
 | `reject --task <id> --note "..."` | Minta perubahan / eskalasi |
 
@@ -105,6 +107,9 @@ tidak bisa diaudit.
 |---|---|---|
 | `provider_unconfigured` / `provider_auth` | Kredensial model tidak valid | Laporkan ke pengguna. **Jangan** mengarang konten sebagai gantinya |
 | `provider_rate_limited` / `rate_limited` | Batas laju tercapai | Tunggu ~60 detik, ulangi **sekali**. Jangan mengulang berulang |
+| `image_provider_unconfigured` | IMAGE_PROVIDER tidak diset | Pastikan .env memiliki `IMAGE_PROVIDER=pollinations` |
+| `image_provider_rate_limited` | Pollinations membatasi | Tunggu 30 detik, lalu ulangi |
+| `image_provider_unavailable` | Provider tidak terjangkau | Cek koneksi internet; coba lagi |
 | `iteration_limit` | Batas 3 remediasi tercapai | Laporkan sisa temuan, sarankan keputusan manusia |
 | `approval_blocked` | Versi terbaru belum `Pass` | Jalankan `revise` atau `review-edit`. Jangan memaksa |
 | `no_actionable_review` | Tidak ada temuan yang bisa diperbaiki | Draft hasil suntingan manusia butuh `review-edit`, bukan `revise` |
