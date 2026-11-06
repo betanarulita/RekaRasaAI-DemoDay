@@ -50,6 +50,18 @@ proposal first, and both paths create tasks through the same function.
 
 Each state has exactly one meaning, and each action is legal in exactly one state. A human edit produces a `pending` version that needs a *review*, not a rewrite — so a Writer retry can never silently overwrite work a person typed.
 
+## Meet the agents
+
+The app gives its three content roles names in the interface. Their technical role names are what the server records and validates.
+
+| Agent | Role | What they do |
+|---|---|---|
+| **Rara** | Planner | Reads the brief and project context, then proposes an objective, supported product facts, constraints, missing information, and content tasks. |
+| **Reka** | Writer | Creates each task's draft from the brief and attached project sources. She cites source IDs and can make a limited number of revisions from review findings. |
+| **Raya** | Reviewer | Checks draft claims against attached sources and configured review rules. She returns findings such as `Pass`, `Fail`, or `Needs Evidence`; the server validates those findings and the human makes the final approval. |
+
+Image editing also uses an **Image Editor** role to turn a natural-language change request into a structured edit plan. It is a technical role without a separate persona name: Groq interprets the request, while the configured image provider (ComfyUI by default) edits the pixels.
+
 ## Verified, not asserted
 
 Last run against the live provider (`openai/gpt-oss-20b`, 29 October 2026), on a throwaway database:
