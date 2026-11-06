@@ -44,8 +44,8 @@ global.document = {
 const api = new Function([
   grab('localDateKey'), grabConst('esc'), grabConst('labelStatus'), grabConst('date'),
   grabConst('state'), grab('taskRow'), grab('eventState'), grab('calendarView'),
-  grab('bindTaskRows'), grab('sentences'), grab('sentenceDiff'),
-  'return { state, calendarView, sentenceDiff };',
+  grab('isImageTask'), grab('taskStatus'), grab('bindTaskRows'), grab('sentences'), grab('sentenceDiff'), grab('listView'), grab('empty'),
+  'return { state, calendarView, sentenceDiff, listView };',
 ].join('\n'))();
 
 const { state, calendarView, sentenceDiff } = api;
@@ -110,5 +110,29 @@ console.log('diff:', diff.map(p => p.type + ':' + p.text).join(' | '));
 if (!diff.some(p => p.type === 'del' && p.text === 'Two bad claim.')) { console.log('FAIL diff deletion'); bad++; }
 if (!diff.some(p => p.type === 'add' && p.text === 'Four.')) { console.log('FAIL diff addition'); bad++; }
 
-console.log(bad ? bad + ' problem(s)' : 'all calendar and diff checks OK');
+api.listView(tasks);
+const listHtml=captured.at(-1).innerHTML;
+if(!listHtml.includes('Launch poster')||!listHtml.includes('data-task="t1"')||!listHtml.includes('No date task')){console.log('FAIL list hides approved or unscheduled content');bad++;}
+api.listView([]);
+if(!captured.at(-1).innerHTML.includes('No content tasks yet')){console.log('FAIL empty list');bad++;}
+const memory = new Map();
+const draftState = {user:{id:'owner-a'}};
+const draftProbe = new Function('state','sessionStorage',[
+  grab('briefStorageKey'),grab('storeBriefDraft'),grab('restoreBriefDraft'),grab('ageRangeProblem'),
+  'return {storeBriefDraft,restoreBriefDraft,ageRangeProblem};'
+].join('\n'))(draftState,{getItem:key=>memory.get(key),setItem:(key,value)=>memory.set(key,value),removeItem:key=>memory.delete(key)});
+draftProbe.storeBriefDraft({brief:'Keep this brief',project_id:'p1'});
+draftState.briefDraft=null;
+draftProbe.restoreBriefDraft();
+if(draftState.briefDraft?.brief!=='Keep this brief'){console.log('FAIL draft restore');bad++;}
+draftState.user={id:'owner-b'};
+draftProbe.restoreBriefDraft();
+if(draftState.briefDraft){console.log('FAIL cross-account draft isolation');bad++;}
+for(const value of ['17-35','25-40 years','50+','Semua usia','']){
+ if(draftProbe.ageRangeProblem(value)){console.log('FAIL valid age',value);bad++;}
+}
+for(const value of ['35-17','abc','121']){
+ if(!draftProbe.ageRangeProblem(value)){console.log('FAIL invalid age',value);bad++;}
+}
+console.log(bad ? bad + ' problem(s)' : 'all calendar, list, diff, brief isolation and age checks OK');
 process.exit(bad ? 1 : 0);

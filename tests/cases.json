@@ -1,0 +1,77 @@
+{
+  "_schema": {
+    "description": "Regression cases for the certificate verifier and Reviewer integration. Each case is a draft fragment plus the certificate numbers it cites and the expected verdict from cert_verifier.verify_certificate.",
+    "fields": {
+      "id": "stable case id",
+      "draft_excerpt": "the text the Writer produced",
+      "cited_number": "the nomor_izin appearing in the draft",
+      "jenis": "bpom | halal",
+      "expected_status": "aktif | kedaluwarsa | cabut | unregistered",
+      "expected_valid": "true only when found AND aktif AND not expired",
+      "expected_rule_reference": "the DEMO-* rule this finding supports",
+      "notes": "why this case matters"
+    }
+  },
+  "cases": [
+    {
+      "id": "CERT-01",
+      "draft_excerpt": "FreshGlow Hydra Serum, BPOM NA18240100001, bersertifikat halal ID0123456789.",
+      "cited_number": "NA18240100001",
+      "jenis": "bpom",
+      "expected_status": "aktif",
+      "expected_valid": true,
+      "expected_rule_reference": "DEMO-FACT-001",
+      "notes": "Baseline legitimate cosmetic claim: active BPOM notification. Reviewer must not false-positive this."
+    },
+    {
+      "id": "CERT-02-EXPIRED",
+      "draft_excerpt": "Legacy Acne Toner dengan BPOM NA18200099999, formula lama yang terbukti aman.",
+      "cited_number": "NA18200099999",
+      "jenis": "bpom",
+      "expected_status": "kedaluwarsa",
+      "expected_valid": false,
+      "expected_rule_reference": "DEMO-FACT-001",
+      "notes": "Expired BPOM notification. Reviewer must reject the draft with DEMO-FACT-001 and cite the expiry date."
+    },
+    {
+      "id": "CERT-03-REVOKED",
+      "draft_excerpt": "Toner Concentrate BPOM NA18200088888, diformulasi khusus untuk jerawat.",
+      "cited_number": "NA18200088888",
+      "jenis": "bpom",
+      "expected_status": "cabut",
+      "expected_valid": false,
+      "expected_rule_reference": "DEMO-FACT-001",
+      "notes": "Revoked BPOM notification. A revoked number must never support a factual claim."
+    },
+    {
+      "id": "CERT-04-UNREGISTERED",
+      "draft_excerpt": "Serum muka dengan BPOM NA99999999999, formula premium.",
+      "cited_number": "NA99999999999",
+      "jenis": "bpom",
+      "expected_status": "unregistered",
+      "expected_valid": false,
+      "expected_rule_reference": "DEMO-FACT-001",
+      "notes": "Fictitious BPOM number not in the local registry. Must be rejected; a number the verifier has never seen cannot support a fact."
+    },
+    {
+      "id": "CERT-05-HALAL-EXPIRED",
+      "draft_excerpt": "Cleansing Foam bersertifikat halal ID9998887776, aman digunakan setiap hari.",
+      "cited_number": "ID9998887776",
+      "jenis": "halal",
+      "expected_status": "kedaluwarsa",
+      "expected_valid": false,
+      "expected_rule_reference": "DEMO-HALAL-001",
+      "notes": "Expired halal certificate. The certification claim must be removed or the certificate renewed."
+    },
+    {
+      "id": "CERT-06-HALAL-ACTIVE",
+      "draft_excerpt": "FreshGlow Hydra Serum bersertifikat halal ID0123456789.",
+      "cited_number": "ID0123456789",
+      "jenis": "halal",
+      "expected_status": "aktif",
+      "expected_valid": true,
+      "expected_rule_reference": "DEMO-HALAL-001",
+      "notes": "Active halal certificate. Legitimate certification claim; must not be false-positived."
+    }
+  ]
+}

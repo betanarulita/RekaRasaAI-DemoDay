@@ -349,6 +349,8 @@ def cmd_plan(args) -> None:
     }
     if args.prefer:
         body["output_preferences"] = args.prefer
+    if args.platforms:
+        body["platform_preferences"] = args.platforms
     if args.custom:
         body["custom_format"] = args.custom
     if args.conversation:
@@ -516,11 +518,28 @@ def cmd_images(args) -> None:
             f"{image.get('size')}  {image.get('created_at')}"
         )
     lines.append("\nPrompt default tersedia di field default_prompt.")
+    for composition in data.get("compositions", []):
+        lines.append(f"  Komposisi {composition['id']}: {composition['status']} (copy {composition['version_id']})")
     emit(data, "\n".join(lines))
+
+
+def cmd_compose_visual(args) -> None:
+    data = call("POST", "/api/compose-visual", {"image_id": args.image, "version_id": args.version})
+    composition = data["composition"]
+    emit(data, f"Komposisi: {composition['id']}\nStatus: {composition['status']}\nBuka workbench untuk pemeriksaan dan approval manusia. Komposisi tidak disetujui oleh agent.")
 
 
 def cmd_generate_image(args) -> None:
     body = {"task_id": args.task, "prompt": args.prompt, "ratio": args.ratio}
+    body["mode"] = args.mode
+    if args.asset:
+        body["asset_id"] = args.asset
+    if args.strength is not None:
+        body["strength"] = args.strength
+    if args.seed is not None:
+        body["seed"] = args.seed
+    if getattr(args, "provider", None):
+        body["provider"] = args.provider
     data = call("POST", "/api/generate-image", body)
     image = data.get("image", {})
     note = ""
@@ -604,6 +623,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--audience")
     p.add_argument("--tone")
     p.add_argument("--prefer", nargs="*", help="Preferensi output (opsional)")
+    p.add_argument("--platforms", nargs="*", choices=["Instagram", "TikTok", "Facebook", "Threads", "X", "Marketplace"], help="Preferensi kanal (opsional)")
     p.add_argument("--custom", help="Format custom (opsional)")
     p.add_argument("--conversation", help="Lanjutkan conversation_id")
     p.set_defaults(func=cmd_plan)
@@ -645,11 +665,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--task", required=True)
     p.set_defaults(func=cmd_images)
 
-    p = add("generate-image", "Buat aset gambar (Pollinations/ComfyUI/OpenAI)")
+    p = add("generate-image", "Create an image concept (ComfyUI or configured Cloudflare)")
+    p.add_argument("--provider", choices=["comfyui", "cloudflare"], help="Image provider; no automatic fallback")
+    p.add_argument("--mode", choices=["concept", "img2img"], default="concept")
+    p.add_argument("--asset", help="Existing Project photo ID for image-to-image")
+    p.add_argument("--strength", type=float, help="Image-to-image change strength, 0.1 to 0.85")
+    p.add_argument("--seed", type=int, help="Optional reproducible sampling seed")
     p.add_argument("--task", required=True)
     p.add_argument("--prompt", required=True)
-    p.add_argument("--ratio", default="square", choices=["square", "portrait", "story"])
+    p.add_argument("--ratio", default="square", choices=["square", "portrait", "story", "landscape"])
     p.set_defaults(func=cmd_generate_image)
+
+    p = add("compose-visual", "Tempatkan copy versi terbaru pada gambar; approval tetap di workbench")
+    p.add_argument("--image", required=True)
+    p.add_argument("--version")
+    p.set_defaults(func=cmd_compose_visual)
 
     p = add("approve", "Approval manusia (butuh verdict Pass)")
     p.add_argument("--task", required=True)

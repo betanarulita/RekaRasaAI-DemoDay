@@ -3,7 +3,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOST=0.0.0.0 PORT=8000 APP_ENV=
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py ./
+COPY app.py visual_content.py catalog_import.py governance_policy.py cloudflare_images.py comfy_workflows.py ./
+COPY agent ./agent
+COPY governance ./governance
 COPY migrations ./migrations
 COPY static ./static
 COPY image ./image

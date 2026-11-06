@@ -2,6 +2,7 @@
 import base64
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -61,8 +62,20 @@ class WorkflowTests(unittest.TestCase):
             data = raw_result
         return int(captured["status"].split()[0]), captured["headers"], data
 
+    def raw_get(self, path, remote="127.0.0.1"):
+        """Fetch a page and return (status, body), with a chosen client address."""
+        env = {"REQUEST_METHOD": "GET", "PATH_INFO": path, "QUERY_STRING": "", "CONTENT_LENGTH": "0", "wsgi.input": io.BytesIO(b""), "HTTP_HOST": "localhost", "REMOTE_ADDR": remote}
+        captured = {}
+        body = b"".join(app.application(env, lambda status, headers: captured.update(status=status)))
+        return int(captured["status"].split()[0]), body.decode("utf-8", "replace")
+
     def register(self, email="owner@example.test"):
-        status, headers, body = self.request("/api/register", "POST", {"email": email, "password": "test-password-123"})
+        with patch.object(app, "SMTP_ENABLED", True), patch.object(app, "send_email", return_value=True) as delivery:
+            status, headers, pending = self.request("/api/register", "POST", {"email": email, "password": "test-password-123"})
+            self.assertEqual(status, 202, pending)
+            self.assertNotIn("Set-Cookie", headers)
+            code = re.search(r"\b[0-9]{6}\b", delivery.call_args.args[2]).group()
+            status, headers, body = self.request("/api/register/verify", "POST", {"email": email, "code": code, "challenge": pending["challenge"]})
         self.assertEqual(status, 200, body)
         cookie = headers["Set-Cookie"].split(";", 1)[0]
         return cookie, body["csrf"], body["user"]["id"]
@@ -125,6 +138,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(body["model"], app.MODEL)
         self.assertEqual(body["max_completion_tokens"], 1800)
         self.assertEqual(body["response_format"]["json_schema"]["strict"], True)
+        self.assertEqual(body["response_format"]["json_schema"]["name"], "planner_output")
         self.assertNotIn("minItems", json.dumps(body["response_format"]))
         self.assertEqual(parsed, planner)
         self.assertEqual(usage, {"input_tokens":12,"output_tokens":9})
@@ -367,6 +381,73 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(status, 502)
         self.assertEqual(body["code"], "image_provider_error")
 
+    def test_photo_edit_routes_to_comfyui_without_concept_fallback(self):
+        import struct, zlib
+        def chunk(kind, data):
+            return struct.pack(">I",len(data))+kind+data+struct.pack(">I",zlib.crc32(kind+data)&0xffffffff)
+        png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR",struct.pack(">IIBBBBB",64,64,8,2,0,0,0)) + chunk(b"IDAT",zlib.compress((b"\0"+b"\xff"*192)*64)) + chunk(b"IEND",b"")
+        cookie, csrf, owner = self.register()
+        project = self.project(owner)
+        task_id, _ = self.task(owner, project)
+        asset_id = app.uid()
+        db = app.connect()
+        db.execute("INSERT INTO project_assets VALUES(?,?,?,?,?,?,?)", (asset_id,project,"product.png","image/png",png,"test-source-hash",app.now()))
+        db.commit(); db.close()
+        payload = {"task_id":task_id,"prompt":"Neutral studio background","ratio":"portrait","mode":"edit","asset_id":asset_id,"mask":base64.b64encode(png).decode()}
+        with patch.object(app,"IMAGE_PROVIDER","pollinations"), patch.object(app,"IMAGE_STORAGE_PATH",Path(TEMP.name)/"edit-images"), patch.object(app,"call_comfyui_provider",return_value=(png,"image/png")) as edit, patch.object(app,"call_image_provider") as concept:
+            status, _, result = self.request("/api/generate-image","POST",payload,cookie,csrf)
+            self.assertEqual(status,201,result)
+            self.assertEqual(result["image"]["provider"],"comfyui")
+            self.assertEqual(result["image"]["size"],"64x64")
+            self.assertEqual(edit.call_args.kwargs["reference"],png)
+            self.assertEqual(edit.call_args.kwargs["mask"],png)
+            concept.assert_not_called()
+        with patch.object(app,"call_comfyui_provider",side_effect=app.APIError(502,"Start ComfyUI","image_provider_unavailable")), patch.object(app,"call_image_provider") as concept:
+            status, _, result = self.request("/api/generate-image","POST",payload,cookie,csrf)
+            self.assertEqual(status,502,result)
+            concept.assert_not_called()
+        db=app.connect()
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM generated_images WHERE task_id=?",(task_id,)).fetchone()[0],1)
+        db.close()
+        payload["asset_id"] = "another-project-photo"
+        with patch.object(app,"call_comfyui_provider") as edit:
+            status, _, result = self.request("/api/generate-image","POST",payload,cookie,csrf)
+            self.assertEqual(status,400,result)
+            edit.assert_not_called()
+
+    def test_comfyui_photo_workflow_uploads_reference_and_recomposites_protected_pixels(self):
+        calls=[]
+        png=b"\x89PNG\r\n\x1a\nFAKE"
+        class Response:
+            def __init__(self,data): self.data=data
+            def __enter__(self): return self
+            def __exit__(self,*args): pass
+            def read(self,*args): return self.data
+        def fake(request,timeout=None):
+            url=request.full_url if hasattr(request,"full_url") else request
+            if url.endswith("/upload/image"):
+                calls.append(request.data)
+                return Response(json.dumps({"name":"input-"+str(len(calls))+".png"}).encode())
+            if url.endswith("/prompt"):
+                graph=json.loads(request.data)["prompt"]
+                self.assertEqual(graph["4"]["class_type"],"VAEEncodeForInpaint")
+                self.assertEqual(graph["9"]["inputs"]["channel"],"red")
+                self.assertEqual(graph["10"]["inputs"]["destination"],["8",0])
+                self.assertEqual(graph["10"]["inputs"]["mask"],["9",0])
+                self.assertEqual(graph["7"]["inputs"]["images"],["10",0])
+                return Response(b'{"prompt_id":"edit-job"}')
+            if "/history/" in url:
+                return Response(b'{"edit-job":{"outputs":{"7":{"images":[{"filename":"result.png"}]}},"status":{"completed":true}}}')
+            if "/view?" in url: return Response(png)
+            raise AssertionError(url)
+        with patch.object(app,"COMFYUI_CHECKPOINT","sd15.safetensors"),patch.object(app,"urlopen",side_effect=fake):
+            result,media=app.call_comfyui_provider("Studio background","64x64",reference=b"SOURCE",mask=b"MASK")
+        self.assertEqual(result,png)
+        self.assertEqual(media,"image/png")
+        self.assertEqual(len(calls),2)
+        self.assertIn(b"SOURCE",calls[0])
+        self.assertIn(b"MASK",calls[1])
+
     def test_comfyui_queues_standard_workflow_polls_history_and_fetches_png(self):
         image = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=")
 
@@ -530,7 +611,7 @@ class WorkflowTests(unittest.TestCase):
         project_id = self.project(owner)
         task_id, version_id = self.task(owner, project_id, content=SAFE_DRAFT, review=None)
         findings = [
-            {"criterion": rule_id, "result": "Pass", "claim": "Checked; nothing prohibited found.", "rule_id": rule_id, "evidence_source_id": None, "explanation": "Checked against the draft.", "recommendation": "None."}
+            {"criterion": rule_id, "result": "Pass", "claim": "", "rule_id": rule_id, "evidence_source_id": None, "explanation": "Checked against the draft.", "recommendation": "None."}
             for rule_id in ("DEMO-CLAIM-001", "DEMO-HALAL-001", "DEMO-TONE-001")
         ]
         findings.append({"criterion": "Product fact", "result": "Pass", "claim": "", "rule_id": "DEMO-FACT-001", "evidence_source_id": None, "explanation": "No product claim to support.", "recommendation": "None."})
@@ -703,11 +784,11 @@ class WorkflowTests(unittest.TestCase):
         with patch.object(app.log, "warning") as warning:
             status, _, body = self.request("/api/password/request", "POST", {"email": "reset@example.test"})
         self.assertEqual(status, 202, body)
-        self.assertNotIn("token", json.dumps(body).lower().replace("reset token was printed", ""))
         message = warning.call_args.args[0]
         token = warning.call_args.kwargs["extra"]["token"]
+        self.assertNotIn(token, json.dumps(body), "the reset token leaked into the API response")
         self.assertIn("password.reset_token_printed", message)
-        self.assertGreater(len(token), 20)
+        self.assertRegex(token, r"^\d{6}$", "the reset code should be six digits")
 
         status, _, body = self.request("/api/password/reset", "POST", {"email": "reset@example.test", "token": token, "password": "brand-new-password-456"})
         self.assertEqual(status, 200, body)
@@ -717,6 +798,45 @@ class WorkflowTests(unittest.TestCase):
 
         # The same token cannot be spent twice.
         status, _, body = self.request("/api/password/reset", "POST", {"email": "reset@example.test", "token": token, "password": "another-password-789"})
+        self.assertEqual(status, 400, body)
+        self.assertEqual(body["code"], "invalid_token")
+
+    def test_a_wrong_code_counts_against_the_live_code(self):
+        """Guessing must cost something, or six digits is a free oracle."""
+        self.register("guess@example.test")
+        with patch.object(app.log, "warning") as warning:
+            self.request("/api/password/request", "POST", {"email": "guess@example.test"})
+        real = warning.call_args.kwargs["extra"]["token"]
+        wrong = "000000" if real != "000000" else "111111"
+        status, _, body = self.request("/api/password/reset", "POST", {"email": "guess@example.test", "token": wrong, "password": "brand-new-password-456"})
+        self.assertEqual(status, 400, body)
+        db = app.connect()
+        attempts = db.execute("SELECT attempts FROM password_resets WHERE used_at IS NULL ORDER BY rowid DESC LIMIT 1").fetchone()[0]
+        db.close()
+        self.assertEqual(attempts, 1)
+
+    def test_five_wrong_codes_retire_the_real_code(self):
+        """The cap must invalidate the code, not merely slow the guesser."""
+        self.register("lockout@example.test")
+        with patch.object(app.log, "warning") as warning:
+            self.request("/api/password/request", "POST", {"email": "lockout@example.test"})
+        real = warning.call_args.kwargs["extra"]["token"]
+        wrong = "000000" if real != "000000" else "111111"
+        for _ in range(app.RESET_MAX_ATTEMPTS):
+            self.request("/api/password/reset", "POST", {"email": "lockout@example.test", "token": wrong, "password": "brand-new-password-456"})
+        # Even the genuine code no longer works once the cap is reached.
+        status, _, body = self.request("/api/password/reset", "POST", {"email": "lockout@example.test", "token": real, "password": "brand-new-password-456"})
+        self.assertEqual(status, 400, body)
+        self.assertEqual(body["code"], "invalid_token")
+        db = app.connect()
+        row = db.execute("SELECT attempts, used_at FROM password_resets ORDER BY rowid DESC LIMIT 1").fetchone()
+        db.close()
+        self.assertGreaterEqual(row["attempts"], app.RESET_MAX_ATTEMPTS)
+        self.assertIsNotNone(row["used_at"])
+
+    def test_a_non_numeric_code_is_rejected_before_any_lookup(self):
+        self.register("shape@example.test")
+        status, _, body = self.request("/api/password/reset", "POST", {"email": "shape@example.test", "token": "not-a-code", "password": "brand-new-password-456"})
         self.assertEqual(status, 400, body)
         self.assertEqual(body["code"], "invalid_token")
 
@@ -937,7 +1057,7 @@ class WorkflowTests(unittest.TestCase):
                 self.assertTrue(payload["this_task"]["goal"])
                 content = "HOOK: A warm pause in the middle of your day.\nSCENE 1: Steam rising from a cup on a wooden table, morning light.\nVOICEOVER: Ginger and honey, mixed with hot water, nothing else needed.\nSCENE 2: Hands holding the cup, close on the steam.\nVOICEOVER: Ten sachets in a tin, small batches, made in Bandung.\nCTA: See product details." if payload["this_task"]["platform"] == "TikTok" else "PRODUCT TITLE: Ginger and honey drink mix\nDESCRIPTION: A warm drink made with ginger and honey. Mix one sachet with hot water, stir, and serve. Pack size: ten sachets. Blended in small batches. Keep the tin closed and dry after opening."
                 return {"drafts":[{"task_id":payload["this_task"]["id"], "content":content, "source_ids":[source]}]}, {"input_tokens": 40, "output_tokens": 35}
-            return {"findings":[{"criterion":rule, "result":"Pass", "claim":"Supported product description", "rule_id":rule, "evidence_source_id":source, "explanation":"Checked against project source and brief.", "recommendation":"No change required."} for rule in rules]}, {"input_tokens": 50, "output_tokens": 25}
+            return {"findings":[{"criterion":rule, "result":"Pass", "claim":"Ginger and honey", "rule_id":rule, "evidence_source_id":source, "explanation":"Checked against project source and brief.", "recommendation":"No change required."} for rule in rules]}, {"input_tokens": 50, "output_tokens": 25}
 
         with patch.object(app, "llm_json", side_effect=fake_provider):
             status, _, proposed = self.request("/api/plan", "POST", {"project_id":project, "brief":"Introduce a ginger honey drink without medical claims.", "audience":"Warm drink fans", "tone":"Warm and factual", "output_preferences":["TikTok short-video script","Marketplace description"]}, cookie, csrf)
@@ -1251,8 +1371,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("request_id", body)
 
     def test_email_verification_flow_with_smtp_disabled(self):
-        # Without SMTP configured, registration should still succeed and
-        # no verification email is sent.
+        # The helper supplies fake delivery and verifies the code before access.
+        # No SMTP connection is needed for this authenticated workflow.
         cookie, csrf, owner = self.register("verify@example.test")
         self.assertEqual(self.request("/api/home", "GET", cookie=cookie)[0], 200)
 
@@ -1261,9 +1381,73 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertEqual(body["code"], "invalid_token")
 
-    def test_send_email_is_noop_without_smtp(self):
-        result = app.send_email("test@example.test", "Subject", "Body")
-        self.assertFalse(result)
+    def test_smtp_needs_host_user_and_password_to_count_as_enabled(self):
+        """A host without credentials must not be advertised as email delivery."""
+        self.assertFalse(app.smtp_configured("smtp.gmail.com", "a@b.test", ""))
+        self.assertFalse(app.smtp_configured("", "a@b.test", "x" * 16))
+        self.assertFalse(app.smtp_configured("smtp.gmail.com", "", "x" * 16))
+        self.assertTrue(app.smtp_configured("smtp.gmail.com", "a@b.test", "x" * 16))
+
+    def test_send_email_is_noop_when_no_channel_is_configured(self):
+        with patch.object(app, "SMTP_ENABLED", False), patch.object(app, "DEV_MAILBOX_ENABLED", False):
+            self.assertFalse(app.send_email("test@example.test", "Subject", "Body"))
+
+    def test_local_mailbox_mirrors_a_message_when_smtp_is_on(self):
+        """A provider outage during a demo must not hide the code entirely."""
+        app.LOCAL_MAILBOX.clear()
+        try:
+            with patch.object(app, "SMTP_ENABLED", True), patch.object(app, "DEV_MAILBOX_ENABLED", True), patch("smtplib.SMTP") as smtp:
+                smtp.side_effect = OSError("provider down")
+                delivered = app.send_email("mirror@example.test", "Reset your password", "code 123456")
+            self.assertFalse(delivered, "a failed send must not report success")
+            self.assertEqual(len(app.LOCAL_MAILBOX), 1, "the local copy was not kept")
+            self.assertIn("123456", app.LOCAL_MAILBOX[0]["body"])
+        finally:
+            app.LOCAL_MAILBOX.clear()
+
+    def test_local_mailbox_holds_the_reset_token_without_exposing_it_in_the_response(self):
+        """The token must reach the local inbox, and never the HTTP response.
+
+        Returning it in the response would let anyone request a reset for an
+        address they do not own and read the token straight back.
+        """
+        self.register("mailbox@example.test")
+        app.LOCAL_MAILBOX.clear()
+        try:
+            with patch.object(app, "SMTP_ENABLED", False), patch.object(app, "DEV_MAILBOX_ENABLED", True), patch.object(app.log, "warning"):
+                status, _, body = self.request("/api/password/request", "POST", {"email": "mailbox@example.test"})
+            self.assertEqual(status, 202, body)
+            self.assertEqual(len(app.LOCAL_MAILBOX), 1, "the reset email never reached the local mailbox")
+            message = app.LOCAL_MAILBOX[0]
+            self.assertEqual(message["to"], "mailbox@example.test")
+            self.assertIn("Reset your RekaRasa.ai password", message["subject"])
+            token = message["body"].split("\n\n")[1].strip()
+            self.assertRegex(token, r"^\d{6}$")
+            self.assertNotIn(token, json.dumps(body), "the reset token leaked into the API response")
+            # The token that arrived in the inbox is the one that actually works.
+            status, _, reset = self.request("/api/password/reset", "POST", {"email": "mailbox@example.test", "token": token, "password": "brand-new-password-456"})
+            self.assertEqual(status, 200, reset)
+        finally:
+            app.LOCAL_MAILBOX.clear()
+
+    def test_local_mailbox_page_is_readable_only_from_this_machine(self):
+        app.LOCAL_MAILBOX.insert(0, {"to": "a@b.test", "subject": "Reset", "body": "token SECRET123", "created_at": app.now()})
+        try:
+            with patch.object(app, "DEV_MAILBOX_ENABLED", True):
+                status, page = self.raw_get("/dev/mailbox", remote="10.1.2.3")
+                self.assertEqual(status, 404, "a remote client could read the mailbox")
+                self.assertNotIn("SECRET123", page)
+                status, page = self.raw_get("/dev/mailbox", remote="127.0.0.1")
+                self.assertEqual(status, 200)
+                self.assertIn("SECRET123", page)
+        finally:
+            app.LOCAL_MAILBOX.clear()
+
+    def test_local_mailbox_page_is_hidden_when_disabled(self):
+        with patch.object(app, "DEV_MAILBOX_ENABLED", False):
+            status, page = self.raw_get("/dev/mailbox", remote="127.0.0.1")
+        self.assertEqual(status, 404)
+        self.assertNotIn("Local Mailbox", page)
 
     def test_migration_007_creates_email_verifications_table(self):
         db = app.connect()

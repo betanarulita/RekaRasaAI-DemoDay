@@ -1,0 +1,9 @@
+{
+  "name": "rekarasa-image-api",
+  "main": "worker.js",
+  "compatibility_date": "2026-11-05",
+  "ai": {"binding": "AI"},
+  "ratelimits": [
+    {"name": "RATE_LIMITER", "namespace_id": "10427", "simple": {"limit": 2, "period": 60}}
+  ]
+}

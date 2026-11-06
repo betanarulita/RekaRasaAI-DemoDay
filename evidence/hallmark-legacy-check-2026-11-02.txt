@@ -1,0 +1,661 @@
+static\styles.css
+  FAIL 10a :1 transition: all on #toast | fix: List the transitioned properties explicitly
+  FAIL 10a :1 transitioning grid-template-columns on .app-shell | fix: Animate transform or opacity instead
+  FAIL 20 :1 no Hallmark stamp on the first non-empty line of any CSS | fix: The stamp comment is line 1 of the CSS; only @charset may precede it
+  FAIL 48 :1 colour literal #a8c5a3 outside tokens (outline on button:focus-visible,input:fo…) | fix: Lift the value into the token block
+  FAIL 48 :1 font-family literal "Manrope,'DM Sans',sans-serif" on h1,h2,h3,.brand-copy
+  FAIL 48 :1 colour literal #f0f0e9 outside tokens (background on .sidebar)
+  FAIL 48 :1 colour literal #e2e3db outside tokens (border on .workspace-switch)
+  FAIL 48 :1 colour literal rgba(255,255,255,.58) outside tokens (background on .workspace-switch)
+  FAIL 48 :1 colour literal #414840 outside tokens (color on .workspace-switch)
+  FAIL 48 :1 colour literal #82a782 outside tokens (background on .workspace-dot)
+  FAIL 48 :1 colour literal #8d9187 outside tokens (color on .chevron)
+  FAIL 48 :1 colour literal #858a80 outside tokens (color on .nav-caption,.eyebrow)
+  FAIL 48 :1 colour literal #6f756d outside tokens (color on .nav-item)
+  FAIL 48 :1 colour literal #e7e8df outside tokens (background on .nav-item:hover)
+  FAIL 48 :1 colour literal #e2e9df outside tokens (background on .nav-item.active)
+  FAIL 48 :1 colour literal #304936 outside tokens (color on .nav-item.active)
+  FAIL 48 :1 colour literal #d9dad1 outside tokens (border on .nav-shortcut)
+  FAIL 48 :1 colour literal #9a9d94 outside tokens (color on .nav-shortcut)
+  FAIL 48 :1 colour literal #777e74 outside tokens (color on .provider-pill)
+  FAIL 48 :1 colour literal #9aa198 outside tokens (background on .status-dot)
+  FAIL 48 :1 colour literal #6c9b69 outside tokens (background on .status-dot.green)
+  FAIL 48 :1 colour literal #dddeda outside tokens (border-top on .account)
+  FAIL 48 :1 colour literal #dbe6d8 outside tokens (background on .avatar)
+  FAIL 48 :1 colour literal #38523e outside tokens (color on .avatar)
+  FAIL 48 :1 colour literal #90948c outside tokens (color on .account-copy small)
+  FAIL 48 :1 colour literal #8a9087 outside tokens (color on .account-more)
+  FAIL 48 :1 colour literal rgba(250,249,245,.85) outside tokens (background on .topbar)
+  FAIL 48 :1 colour literal #8b8e85 outside tokens (color on .crumb)
+  FAIL 48 :1 colour literal #c1c2bb outside tokens (color on .crumb span)
+  FAIL 48 :1 colour literal #42483f outside tokens (color on .crumb strong)
+  FAIL 48 :1 colour literal #858a80 outside tokens (color on .today-label)
+  FAIL 48 :1 colour literal #dedfd7 outside tokens (border-color on .button.secondary)
+  FAIL 48 :1 colour literal #51574e outside tokens (color on .button.secondary)
+  FAIL 48 :1 colour literal #f0f1ec outside tokens (background on .button.secondary:hover:not(:…)
+  FAIL 48 :1 colour literal #192e20 outside tokens (color on .text-button:hover)
+  FAIL 48 :1 font-family literal "Georgia,serif" on .welcome-row h1 em
+  FAIL 48 :1 colour literal #68836d outside tokens (color on .welcome-row h1 em)
+  FAIL 48 :1 colour literal #777d74 outside tokens (color on .hero-sub)
+  FAIL 48 :1 colour literal #d9dfd5 outside tokens (border on .hero-stamp)
+  FAIL 48 :1 colour literal #83917e outside tokens (color on .hero-stamp)
+  FAIL 48 :1 colour literal #96a58e outside tokens (color on .hero-stamp i)
+  FAIL 48 :1 colour literal rgba(255,255,255,.58) outside tokens (background on .task-row:hover)
+  FAIL 48 :1 colour literal #e8eee5 outside tokens (background on .task-symbol.sage)
+  FAIL 48 :1 colour literal #557459 outside tokens (color on .task-symbol.sage)
+  FAIL 48 :1 colour literal #f4e8e3 outside tokens (background on .task-symbol.rose)
+  FAIL 48 :1 colour literal #a25247 outside tokens (color on .task-symbol.rose)
+  FAIL 48 :1 colour literal #f3ecdf outside tokens (background on .task-symbol.amber)
+  FAIL 48 :1 colour literal #9c743c outside tokens (color on .task-symbol.amber)
+  FAIL 48 :1 colour literal #838880 outside tokens (color on .task-main small)
+  FAIL 48 :1 colour literal #edece6 outside tokens (background on .task-status)
+  FAIL 48 :1 colour literal #777b71 outside tokens (color on .task-status)
+  FAIL 48 :1 colour literal #f3e8e3 outside tokens (background on .task-status.needs_revision,.…)
+  FAIL 48 :1 colour literal #99574d outside tokens (color on .task-status.needs_revision,.…)
+  FAIL 48 :1 colour literal #f3eddf outside tokens (background on .task-status.approved_pending…)
+  FAIL 48 :1 colour literal #906e38 outside tokens (color on .task-status.approved_pending…)
+  FAIL 48 :1 colour literal #e7eee5 outside tokens (background on .task-status.human_approved)
+  FAIL 48 :1 colour literal #527250 outside tokens (color on .task-status.human_approved)
+  FAIL 48 :1 colour literal #9ca198 outside tokens (color on .row-arrow)
+  FAIL 48 :1 colour literal #87977f outside tokens (color on .empty-symbol)
+  FAIL 48 :1 colour literal #858b81 outside tokens (color on .empty-state p)
+  FAIL 48 :1 colour literal #e4e9de outside tokens (background on .project-cover)
+  FAIL 48 :1 colour literal #8a9a85 outside tokens (color on .project-cover)
+  FAIL 48 :1 colour literal #eee8de outside tokens (background on .project-tile:nth-child(2) .p…)
+  FAIL 48 :1 colour literal #af9b7d outside tokens (color on .project-tile:nth-child(2) .p…)
+  FAIL 48 :1 colour literal #e7e8e3 outside tokens (background on .project-tile:nth-child(3) .p…)
+  FAIL 48 :1 colour literal #84918a outside tokens (color on .project-tile:nth-child(3) .p…)
+  FAIL 48 :1 colour literal #ecefe8 outside tokens (background on .rules-note)
+  FAIL 48 :1 colour literal #737b70 outside tokens (color on .rules-note p)
+  FAIL 48 :1 colour literal #dedfd6 outside tokens (border on .brief-form textarea,.brief-f…)
+  FAIL 48 :1 colour literal #fff outside tokens (background on .brief-form textarea,.brief-f…)
+  FAIL 48 :1 colour literal #afb2a9 outside tokens (color on .brief-form textarea::placeho…)
+  FAIL 48 :1 colour literal #94998f outside tokens (color on .field-hint)
+  FAIL 48 :1 colour literal #e3e3dc outside tokens (border on .format-option)
+  FAIL 48 :1 colour literal rgba(255,255,255,.65) outside tokens (background on .format-option)
+  FAIL 48 :1 colour literal #94a88e outside tokens (border-color on .format-option:has(input:chec…)
+  FAIL 48 :1 colour literal #f4f7f2 outside tokens (background on .format-option:has(input:chec…)
+  FAIL 48 :1 colour literal #edf0e9 outside tokens (background on .format-icon)
+  FAIL 48 :1 colour literal #657960 outside tokens (color on .format-icon)
+  FAIL 48 :1 colour literal #888e84 outside tokens (color on .format-option small)
+  FAIL 48 :1 colour literal #888e85 outside tokens (color on .source-box small)
+  FAIL 48 :1 colour literal #80937b outside tokens (color on .source-icon)
+  FAIL 48 :1 colour literal #eeefe9 outside tokens (background on .composer-aside)
+  FAIL 48 :1 colour literal #899884 outside tokens (color on .aside-asterisk)
+  FAIL 48 :1 colour literal #83907f outside tokens (color on .steps li>span)
+  FAIL 48 :1 colour literal #868b81 outside tokens (color on .steps small)
+  FAIL 48 :1 colour literal #dfe1d8 outside tokens (border-top on .aside-foot)
+  FAIL 48 :1 colour literal #868b81 outside tokens (color on .aside-foot)
+  FAIL 48 :1 colour literal #eee outside tokens (border-bottom on .plan-label)
+  FAIL 48 :1 colour literal #90958b outside tokens (color on .plan-label small)
+  FAIL 48 :1 colour literal #eee outside tokens (background on .status-chip)
+  FAIL 48 :1 colour literal #757b71 outside tokens (color on .status-chip)
+  FAIL 48 :1 colour literal #f2eddf outside tokens (background on .status-chip.proposed)
+  FAIL 48 :1 colour literal #8e7039 outside tokens (color on .status-chip.proposed)
+  FAIL 48 :1 colour literal #e7efe5 outside tokens (background on .status-chip.pass)
+  FAIL 48 :1 colour literal #547254 outside tokens (color on .status-chip.pass)
+  FAIL 48 :1 colour literal #f1e9df outside tokens (background on .status-chip.needs)
+  FAIL 48 :1 colour literal #936d35 outside tokens (color on .status-chip.needs)
+  FAIL 48 :1 colour literal #626960 outside tokens (color on .plan-block p,.plan-block li)
+  FAIL 48 :1 colour literal #f6f2e8 outside tokens (background on .missing-note)
+  FAIL 48 :1 colour literal #806c46 outside tokens (color on .missing-note)
+  FAIL 48 :1 colour literal #eeeee8 outside tokens (border-top on .plan-task)
+  FAIL 48 :1 colour literal #899682 outside tokens (color on .task-index)
+  FAIL 48 :1 colour literal #666d64 outside tokens (color on .plan-task p)
+  FAIL 48 :1 colour literal #8a9086 outside tokens (color on .plan-task small)
+  FAIL 48 :1 colour literal #eeeee8 outside tokens (border-top on .plan-actions)
+  FAIL 48 :1 colour literal #789078 outside tokens (color on .run-glyph)
+  FAIL 48 :1 colour literal #788076 outside tokens (color on .run-state p)
+  FAIL 48 :1 colour literal #91968d outside tokens (color on .run-item small)
+  FAIL 48 :1 colour literal #afb8aa outside tokens (border on .run-dot)
+  FAIL 48 :1 colour literal #638266 outside tokens (background on .run-item.done .run-dot)
+  FAIL 48 :1 colour literal #638266 outside tokens (border-color on .run-item.done .run-dot)
+  FAIL 48 :1 colour literal #b46658 outside tokens (background on .run-item.failed .run-dot)
+  FAIL 48 :1 colour literal #b46658 outside tokens (border-color on .run-item.failed .run-dot)
+  FAIL 48 :1 colour literal #858a81 outside tokens (color on .projects-toolbar p)
+  FAIL 48 :1 colour literal #eee8de outside tokens (background on .project-card:nth-child(3n+2)…)
+  FAIL 48 :1 colour literal #a18c70 outside tokens (color on .project-card:nth-child(3n+2)…)
+  FAIL 48 :1 colour literal #e4e8e8 outside tokens (background on .project-card:nth-child(3n) .…)
+  FAIL 48 :1 colour literal #81908d outside tokens (color on .project-card:nth-child(3n) .…)
+  FAIL 48 :1 colour literal #8c9187 outside tokens (color on .project-card-body small)
+  FAIL 48 :1 colour literal #a4a89f outside tokens (color on .card-arrow)
+  FAIL 48 :1 colour literal #758171 outside tokens (color on .back-link)
+  FAIL 48 :1 colour literal #92968c outside tokens (color on .count-label)
+  FAIL 48 :1 colour literal #8c9187 outside tokens (color on .source-row small)
+  FAIL 48 :1 colour literal #7f907b outside tokens (color on .source-tag)
+  FAIL 48 :1 colour literal #83887f outside tokens (color on .rule-explainer p)
+  FAIL 48 :1 colour literal rgba(30,37,31,.38) outside tokens (background on .modal-backdrop)
+  FAIL 48 :1 colour literal #fbfaf7 outside tokens (background on .modal-card)
+  FAIL 48 :1 colour literal rgba(0,0,0,.19) outside tokens (box-shadow on .modal-card)
+  FAIL 48 :1 colour literal #838980 outside tokens (color on .modal-close)
+  FAIL 48 :1 colour literal #81867d outside tokens (color on .modal-card>p)
+  FAIL 48 :1 colour literal #71856c outside tokens (color on .registry-rule code,.rule-cit…)
+  FAIL 48 :1 colour literal #646b61 outside tokens (color on .registry-rule p)
+  FAIL 48 :1 colour literal #ebebe5 outside tokens (background on .segmented)
+  FAIL 48 :1 colour literal #777c73 outside tokens (color on .segmented button)
+  FAIL 48 :1 colour literal rgba(0,0,0,.07) outside tokens (box-shadow on .segmented button.selected)
+  FAIL 48 :1 colour literal #3c5742 outside tokens (color on .segmented button.selected)
+  FAIL 48 :1 colour literal #93988e outside tokens (color on .planner-note)
+  FAIL 48 :1 colour literal #62685f outside tokens (color on .group-label)
+  FAIL 48 :1 colour literal #a0a49b outside tokens (color on .group-label small)
+  FAIL 48 :1 colour literal #a1a69b outside tokens (background on .group-dot)
+  FAIL 48 :1 colour literal #bd776a outside tokens (background on .group-dot.needs_revision,.gr…)
+  FAIL 48 :1 colour literal #c49b5e outside tokens (background on .group-dot.approved_pending_h…)
+  FAIL 48 :1 colour literal #7fa17b outside tokens (background on .group-dot.human_approved)
+  FAIL 48 :1 colour literal #e1e1d9 outside tokens (border on .icon-button)
+  FAIL 48 :1 colour literal #696f65 outside tokens (color on .icon-button)
+  FAIL 48 :1 colour literal #eff0e9 outside tokens (background on .icon-button:hover)
+  FAIL 48 :1 colour literal #efefe9 outside tokens (background on .weekday)
+  FAIL 48 :1 colour literal #7b8177 outside tokens (color on .weekday)
+  FAIL 48 :1 colour literal rgba(255,255,255,.55) outside tokens (background on .calendar-day)
+  FAIL 48 :1 colour literal #f0f0eb outside tokens (background on .calendar-day.outside)
+  FAIL 48 :1 colour literal #b5b7af outside tokens (color on .calendar-day.outside)
+  FAIL 48 :1 colour literal #7e9b7d outside tokens (box-shadow on .calendar-day.selected)
+  FAIL 48 :1 colour literal #f5f8f2 outside tokens (background on .calendar-day.selected)
+  FAIL 48 :1 colour literal #ecf0e8 outside tokens (background on .calendar-event)
+  FAIL 48 :1 colour literal #526a50 outside tokens (color on .calendar-event)
+  FAIL 48 :1 colour literal #e2eddf outside tokens (background on .calendar-event.approved)
+  FAIL 48 :1 colour literal #888d83 outside tokens (color on .calendar-selected>p,.unsched…)
+  FAIL 48 :1 colour literal #858a81 outside tokens (color on .history-item small)
+  FAIL 48 :1 colour literal #778d74 outside tokens (color on .history-glyph)
+  FAIL 48 :1 colour literal #dce0d7 outside tokens (border-left on .audit-list)
+  FAIL 48 :1 colour literal #82947d outside tokens (background on .audit-line)
+  FAIL 48 :1 colour literal #8d9289 outside tokens (color on .audit-copy small)
+  FAIL 48 :1 colour literal #81867d outside tokens (color on .settings-row p)
+  FAIL 48 :1 colour literal #ecefe8 outside tokens (background on .settings-foot)
+  FAIL 48 :1 colour literal #747d71 outside tokens (color on .settings-foot)
+  FAIL 48 :1 colour literal #858a81 outside tokens (color on .fatal p)
+  FAIL 48 :1 colour literal #858a81 outside tokens (color on .workbench-heading p)
+  FAIL 48 :1 colour literal #e7e7df outside tokens (border on .version-pill)
+  FAIL 48 :1 colour literal #858a80 outside tokens (color on .version-pill)
+  FAIL 48 :1 colour literal #41473f outside tokens (color on .draft-preview)
+  FAIL 48 :1 colour literal #f8f8f4 outside tokens (background on .draft-preview.script-preview)
+  FAIL 48 :1 colour literal #668068 outside tokens (color on .script-label)
+  FAIL 48 :1 colour literal #edede7 outside tokens (border-top on .draft-bottom)
+  FAIL 48 :1 colour literal #92968d outside tokens (color on .draft-bottom)
+  FAIL 48 :1 colour literal #e8e9e4 outside tokens (border on .version-diff)
+  FAIL 48 :1 colour literal #fcfcf9 outside tokens (background on .version-diff)
+  FAIL 48 :1 colour literal #4b514a outside tokens (color on .version-diff summary)
+  FAIL 48 :1 colour literal #8a908b outside tokens (color on .version-diff summary::before)
+  FAIL 48 :1 colour literal #eef6ec outside tokens (background on .diff-line.add)
+  FAIL 48 :1 colour literal #3f6b43 outside tokens (color on .diff-line.add)
+  FAIL 48 :1 colour literal #fbeeeb outside tokens (background on .diff-line.del)
+  FAIL 48 :1 colour literal #8c443a outside tokens (color on .diff-line.del)
+  FAIL 48 :1 colour literal #767d74 outside tokens (color on .diff-line.same)
+  FAIL 48 :1 colour literal #8a908b outside tokens (color on .diff-body:empty::after)
+  FAIL 48 :1 colour literal #687e65 outside tokens (color on .version-node)
+  FAIL 48 :1 colour literal #dfe4da outside tokens (border on .version-node)
+  FAIL 48 :1 colour literal #90958c outside tokens (color on .version-row small)
+  FAIL 48 :1 colour literal #65805f outside tokens (color on .version-approved)
+  FAIL 48 :1 colour literal #eee outside tokens (border-bottom on .review-header)
+  FAIL 48 :1 colour literal #90958c outside tokens (color on .review-header small)
+  FAIL 48 :1 colour literal #f2ebe4 outside tokens (background on .agent-avatar.reviewer)
+  FAIL 48 :1 colour literal #967354 outside tokens (color on .agent-avatar.reviewer)
+  FAIL 48 :1 colour literal #e9edf3 outside tokens (background on .agent-avatar.writer)
+  FAIL 48 :1 colour literal #647b9a outside tokens (color on .agent-avatar.writer)
+  FAIL 48 :1 colour literal #e8eee5 outside tokens (background on .agent-avatar.planner)
+  FAIL 48 :1 colour literal #627a60 outside tokens (color on .agent-avatar.planner)
+  FAIL 48 :1 colour literal #e7efe5 outside tokens (background on .verdict-badge.pass)
+  FAIL 48 :1 colour literal #597855 outside tokens (color on .verdict-badge.pass)
+  FAIL 48 :1 colour literal #f4e9e5 outside tokens (background on .verdict-badge.fail)
+  FAIL 48 :1 colour literal #9f574c outside tokens (color on .verdict-badge.fail)
+  FAIL 48 :1 colour literal #f2eddf outside tokens (background on .verdict-badge.needs)
+  FAIL 48 :1 colour literal #987441 outside tokens (color on .verdict-badge.needs)
+  FAIL 48 :1 colour literal #f0f0eb outside tokens (border-bottom on .finding)
+  FAIL 48 :1 colour literal #eee outside tokens (background on .finding-mark)
+  FAIL 48 :1 colour literal #777 outside tokens (color on .finding-mark)
+  FAIL 48 :1 colour literal #e7efe5 outside tokens (background on .finding-pass .finding-mark)
+  FAIL 48 :1 colour literal #5c7c58 outside tokens (color on .finding-pass .finding-mark)
+  FAIL 48 :1 colour literal #f4e9e5 outside tokens (background on .finding-fail .finding-mark)
+  FAIL 48 :1 colour literal #a55b50 outside tokens (color on .finding-fail .finding-mark)
+  FAIL 48 :1 colour literal #f2eddf outside tokens (background on .finding-needs .finding-mark)
+  FAIL 48 :1 colour literal #967641 outside tokens (color on .finding-needs .finding-mark)
+  FAIL 48 :1 colour literal #858a81 outside tokens (color on .finding-result)
+  FAIL 48 :1 colour literal #d8ded3 outside tokens (border-left on .finding blockquote)
+  FAIL 48 :1 colour literal #5d655b outside tokens (color on .finding blockquote)
+  FAIL 48 :1 colour literal #7d8379 outside tokens (color on .finding>p)
+  FAIL 48 :1 colour literal #f5f6f1 outside tokens (background on .rule-citation)
+  FAIL 48 :1 colour literal #747b71 outside tokens (color on .rule-citation p)
+  FAIL 48 :1 colour literal #71866b outside tokens (color on .evidence-link,.evidence-miss…)
+  FAIL 48 :1 colour literal #9a7a48 outside tokens (color on .evidence-missing)
+  FAIL 48 :1 colour literal #b3c1ab outside tokens (border-left on .recommendation)
+  FAIL 48 :1 colour literal #667c61 outside tokens (color on .recommendation b)
+  FAIL 48 :1 colour literal #70776d outside tokens (color on .recommendation p)
+  FAIL 48 :1 colour literal #a2554a outside tokens (color on .invalid-ref)
+  FAIL 48 :1 colour literal #73936b outside tokens (color on .review-clean>span)
+  FAIL 48 :1 colour literal #858a81 outside tokens (color on .review-clean p)
+  FAIL 48 :1 colour literal #eee outside tokens (border-top on .remediation-box,.escalation-…)
+  FAIL 48 :1 colour literal #83887e outside tokens (color on .remediation-box p,.escalatio…)
+  FAIL 48 :1 colour literal #edf2e9 outside tokens (background on .human-gate)
+  FAIL 48 :1 colour literal #648060 outside tokens (color on .human-gate>span)
+  FAIL 48 :1 colour literal #778075 outside tokens (color on .human-gate p)
+  FAIL 48 :1 colour literal #eee outside tokens (border-bottom on .agent-trail>.eyebrow)
+  FAIL 48 :1 colour literal #f0f0eb outside tokens (border-bottom on .agent-step)
+  FAIL 48 :1 colour literal #8b9087 outside tokens (color on .agent-step small,.agent-trai…)
+  FAIL 48 :1 colour literal #858a81 outside tokens (color on .no-draft)
+  FAIL 48 :1 colour literal #f8f7f2 outside tokens (background on .auth-page)
+  FAIL 48 :1 colour literal #eef0e9 outside tokens (background on .auth-left)
+  FAIL 48 :1 font-family literal "Georgia,serif" on .auth-message h1 em
+  FAIL 48 :1 colour literal #718872 outside tokens (color on .auth-message h1 em)
+  FAIL 48 :1 colour literal #777e74 outside tokens (color on .auth-message>p)
+  FAIL 48 :1 colour literal #d9ddd3 outside tokens (border-top on .auth-rule)
+  FAIL 48 :1 colour literal #697668 outside tokens (color on .auth-rule)
+  FAIL 48 :1 colour literal #82927d outside tokens (color on .auth-rule span:first-child)
+  FAIL 48 :1 colour literal #989d92 outside tokens (color on .auth-foot,.auth-corner)
+  FAIL 48 :1 colour literal #868b82 outside tokens (color on .auth-form>p)
+  FAIL 48 :1 colour literal #dedfd6 outside tokens (border on .auth-form input)
+  FAIL 48 :1 colour literal #8b9087 outside tokens (color on .auth-switch)
+  FAIL 48 :1 colour literal #425e47 outside tokens (color on .auth-switch button)
+  FAIL 48 :1 colour literal #a0a49b outside tokens (color on .auth-privacy)
+  FAIL 48 :1 colour literal #f6eae5 outside tokens (background on .inline-error)
+  FAIL 48 :1 colour literal #9c5147 outside tokens (color on .inline-error)
+  FAIL 48 :1 colour literal #eef4ea outside tokens (background on .inline-note)
+  FAIL 48 :1 colour literal #4a6a4c outside tokens (color on .inline-note)
+  FAIL 48 :1 colour literal #344d39 outside tokens (background on #toast)
+  FAIL 48 :1 colour literal #874d43 outside tokens (background on #toast.bad)
+  FAIL 48 :3 colour literal rgba(32,40,32,.11) outside tokens (box-shadow on .app-shell:not(.is-collapsed)…)
+  FAIL 48 :3 colour literal rgba(32,40,32,.22) outside tokens (background on .app-shell:not(.is-collapsed)…)
+  FAIL 48 :7 colour literal #fff outside tokens (background on .planner-calendar,.planner-li…)
+  FAIL 48 :7 colour literal #e7e7e1 outside tokens (border on .planner-calendar,.planner-li…)
+  FAIL 48 :7 colour literal rgba(34,42,34,.035) outside tokens (box-shadow on .planner-calendar,.planner-li…)
+  FAIL 48 :7 colour literal #81877f outside tokens (color on .calendar-filters label span)
+  FAIL 48 :7 colour literal #e1e2dc outside tokens (border on .calendar-filters select)
+  FAIL 48 :7 colour literal #fff outside tokens (background on .calendar-filters select)
+  FAIL 48 :7 colour literal #464c45 outside tokens (color on .calendar-filters select)
+  FAIL 48 :7 colour literal #ecece7 outside tokens (border on .planner-insight)
+  FAIL 48 :7 colour literal #fcfcfa outside tokens (background on .planner-insight)
+  FAIL 48 :7 colour literal #edf2eb outside tokens (background on .insight-icon)
+  FAIL 48 :7 colour literal #4e6b51 outside tokens (color on .insight-icon)
+  FAIL 48 :7 colour literal #81877f outside tokens (color on .planner-insight small)
+  FAIL 48 :7 colour literal #e6e7e1 outside tokens (border-bottom on .weekday)
+  FAIL 48 :7 colour literal #fff outside tokens (background on .weekday)
+  FAIL 48 :7 colour literal #6c736b outside tokens (color on .weekday)
+  FAIL 48 :7 colour literal #e8e9e4 outside tokens (border-right on .calendar-day)
+  FAIL 48 :7 colour literal #e8e9e4 outside tokens (border-bottom on .calendar-day)
+  FAIL 48 :7 colour literal #fff outside tokens (background on .calendar-day)
+  FAIL 48 :7 colour literal #e8e9e4 outside tokens (border-left on .calendar-day:nth-child(7n+8))
+  FAIL 48 :7 colour literal #f9faf7 outside tokens (background on .calendar-day:hover)
+  FAIL 48 :7 colour literal #789278 outside tokens (box-shadow on .calendar-day.selected)
+  FAIL 48 :7 colour literal #f5f8f3 outside tokens (background on .calendar-day.selected)
+  FAIL 48 :7 colour literal #f7f7f4 outside tokens (background on .calendar-day.outside)
+  FAIL 48 :7 colour literal #aeb2aa outside tokens (color on .calendar-day.outside)
+  FAIL 48 :7 colour literal #4b514a outside tokens (color on .day-number)
+  FAIL 48 :7 colour literal #aeb2aa outside tokens (color on .calendar-day.outside .day-nu…)
+  FAIL 48 :7 colour literal #eff0ed outside tokens (background on .calendar-event)
+  FAIL 48 :7 colour literal #8a908b outside tokens (border-left on .calendar-event)
+  FAIL 48 :7 colour literal #525851 outside tokens (color on .calendar-event)
+  FAIL 48 :7 colour literal #7b8179 outside tokens (color on .calendar-event i)
+  FAIL 48 :7 colour literal #edf3ed outside tokens (background on .calendar-event.publication-e…)
+  FAIL 48 :7 colour literal #648269 outside tokens (border-left-color on .calendar-event.publication-e…)
+  FAIL 48 :7 colour literal #e9f1e8 outside tokens (background on .calendar-event.approved)
+  FAIL 48 :7 colour literal #638264 outside tokens (border-left-color on .calendar-event.approved)
+  FAIL 48 :7 colour literal #e4efe1 outside tokens (background on .calendar-event.is-approved)
+  FAIL 48 :7 colour literal #4d7a4f outside tokens (border-left-color on .calendar-event.is-approved)
+  FAIL 48 :7 colour literal #3f5a41 outside tokens (color on .calendar-event.is-approved)
+  FAIL 48 :7 colour literal #3f5a41 outside tokens (color on .calendar-event.is-approved i)
+  FAIL 48 :7 colour literal #fbf2e2 outside tokens (background on .calendar-event.is-pending)
+  FAIL 48 :7 colour literal #b98a3d outside tokens (border-left-color on .calendar-event.is-pending)
+  FAIL 48 :7 colour literal #7a5a22 outside tokens (color on .calendar-event.is-pending)
+  FAIL 48 :7 colour literal #8a6425 outside tokens (color on .calendar-event.is-pending i)
+  FAIL 48 :7 colour literal #fbeae7 outside tokens (background on .calendar-event.is-blocked)
+  FAIL 48 :7 colour literal #a9564c outside tokens (border-left-color on .calendar-event.is-blocked)
+  FAIL 48 :7 colour literal #7d3c34 outside tokens (color on .calendar-event.is-blocked)
+  FAIL 48 :7 colour literal #8c443a outside tokens (color on .calendar-event.is-blocked i)
+  FAIL 48 :7 colour literal #f0e4cc outside tokens (background on .day-open)
+  FAIL 48 :7 colour literal #7d5a1f outside tokens (color on .day-open)
+  FAIL 48 :7 colour literal #fffdf7 outside tokens (background on .calendar-day.has-open)
+  FAIL 48 :7 colour literal #f9f8f2 outside tokens (background on .calendar-day.has-open.outside)
+  FAIL 48 :7 colour literal #f5f8f3 outside tokens (background on .calendar-day.has-open.select…)
+  FAIL 48 :7 colour literal #6f766d outside tokens (color on .calendar-legend)
+  FAIL 48 :7 colour literal #e4efe1 outside tokens (background on .calendar-legend .is-approved)
+  FAIL 48 :7 colour literal #4d7a4f outside tokens (border-color on .calendar-legend .is-approved)
+  FAIL 48 :7 colour literal #fbf2e2 outside tokens (background on .calendar-legend .is-pending)
+  FAIL 48 :7 colour literal #b98a3d outside tokens (border-color on .calendar-legend .is-pending)
+  FAIL 48 :7 colour literal #fbeae7 outside tokens (background on .calendar-legend .is-blocked)
+  FAIL 48 :7 colour literal #a9564c outside tokens (border-color on .calendar-legend .is-blocked)
+  FAIL 48 :7 colour literal #737a70 outside tokens (color on .calendar-more)
+  FAIL 48 :7 colour literal #e9e9e3 outside tokens (border-bottom on .calendar-selected)
+  FAIL 48 :7 colour literal #ecece7 outside tokens (border-top on .calendar-agenda)
+  FAIL 48 :7 colour literal #ecece7 outside tokens (border-bottom on .agenda-entry)
+  FAIL 48 :7 colour literal #6d756c outside tokens (color on .agenda-kind)
+  FAIL 48 :7 colour literal #5c7358 outside tokens (color on .agenda-project)
+  FAIL 48 :7 colour literal #34523e outside tokens (color on .agenda-project:hover)
+  FAIL 48 :7 colour literal #888d83 outside tokens (color on .agenda-empty)
+  FAIL 48 :7 colour literal #858b82 outside tokens (color on .list-view-heading>span)
+  FAIL 48 :7 colour literal #fff outside tokens (background on .planner-empty)
+  FAIL 48 :11 colour literal #fff outside tokens (background on .plan-task-fields input,.plan…)
+  FAIL 48 :13 colour literal #e1e3db outside tokens (border on .visual-studio)
+  FAIL 48 :13 colour literal #fbfbf8 outside tokens (background on .visual-studio)
+  FAIL 48 :13 colour literal #dfe2d9 outside tokens (border on .visual-copy textarea)
+  FAIL 48 :13 colour literal #fff outside tokens (background on .visual-copy textarea)
+  FAIL 48 :13 colour literal #71786e outside tokens (color on .size-select)
+  FAIL 48 :13 colour literal #dfe2d9 outside tokens (border on .size-select select)
+  FAIL 48 :13 colour literal #858b81 outside tokens (color on .visual-note)
+  FAIL 48 :13 colour literal #eff1eb outside tokens (background on .visual-preview)
+  FAIL 48 :13 colour literal rgba(244,245,239,.82) outside tokens (background on .visual-preview.is-loading:af…)
+  FAIL 48 :13 colour literal #778274 outside tokens (color on .visual-empty)
+  FAIL 48 :13 colour literal #90a18a outside tokens (color on .visual-empty>span)
+  FAIL 48 :13 colour literal #8c9288 outside tokens (color on .visual-empty small)
+  FAIL 48 :13 colour literal rgba(22,31,24,.76) outside tokens (background on .visual-meta)
+  FAIL 48 :13 colour literal #f7e9e5 outside tokens (background on .visual-error)
+  FAIL 48 :13 colour literal #8c4239 outside tokens (color on .visual-error)
+  FAIL 48 :13 colour literal #71786e outside tokens (color on .visual-thumb)
+  FAIL 48 :16 colour literal #fff outside tokens (background on .custom-format-label input)
+  FAIL 67 :1 .nav-caption,.eyebrow: letter-spaced tracked 0.12em in a label role | fix: Labels, captions, table heads, nav links and meta are the body face (or the theme's label face), a step smaller, sentence case, untracked
+  FAIL 67 :1 .source-tag: letter-spaced tracked 0.07em in a label role
+  FAIL 67 :1 .script-label: letter-spaced tracked 0.08em in a label role
+  FAIL 67 :7 .calendar-filters label span: letter-spaced tracked 0.04em in a label role
+  REFLEX 24b :1 padding: 22px 15px 14px (off the 4px scale) on .sidebar | fix: Use the 4px spacing scale
+  REFLEX 24b :1 gap: 11px (off the 4px scale) on .brand
+  REFLEX 24b :1 gap: 9px (off the 4px scale) on .workspace-switch
+  REFLEX 24b :1 padding: 0 11px (off the 4px scale) on .workspace-switch
+  REFLEX 24b :1 padding: 0 11px 10px (off the 4px scale) on .nav-caption
+  REFLEX 24b :1 gap: 3px (off the 4px scale) on .nav-list
+  REFLEX 24b :1 padding: 0 11px (off the 4px scale) on .nav-item
+  REFLEX 24b :1 padding: 2px 5px (off the 4px scale) on .nav-shortcut
+  REFLEX 24b :1 padding: 10px 10px 14px (off the 4px scale) on .provider-pill
+  REFLEX 24b :1 gap: 9px (off the 4px scale) on .account
+  REFLEX 24b :1 padding: 13px 4px 2px (off the 4px scale) on .account
+  REFLEX 24b :1 gap: 3px (off the 4px scale) on .account-copy
+  REFLEX 24b :1 gap: 18px (off the 4px scale) on .topbar
+  REFLEX 24b :1 padding: 0 9px (off the 4px scale) on .crumb span
+  REFLEX 24b :1 gap: 17px (off the 4px scale) on .top-actions
+  REFLEX 24b :1 padding: 48px clamp(20px,4vw,58px) 8… (off the 4px scale) on .page-content
+  REFLEX 24b :1 margin-bottom: 34px (off the 4px scale) on .page-head
+  REFLEX 24b :1 margin-bottom: 11px (off the 4px scale) on .page-head .eyebrow,.welcome-row .eyebrow
+  REFLEX 24b :1 margin-bottom: 9px (off the 4px scale) on .page-head h1
+  REFLEX 24b :1 gap: 10px (off the 4px scale) on .button
+  REFLEX 24b :1 padding-left: 5px (off the 4px scale) on .text-button span
+  REFLEX 24b :1 gap: 35px (off the 4px scale) on .welcome-row
+  REFLEX 24b :1 padding: 10px 0 27px (off the 4px scale) on .welcome-row
+  REFLEX 24b :1 padding: 3px (off the 4px scale) on .hero-stamp i
+  REFLEX 24b :1 gap: 11px (off the 4px scale) on .home-actions
+  REFLEX 24b :1 padding-bottom: 47px (off the 4px scale) on .home-actions
+  REFLEX 24b :1 margin-bottom: 17px (off the 4px scale) on .section-line
+  REFLEX 24b :1 gap: 14px (off the 4px scale) on .task-row
+  REFLEX 24b :1 gap: 5px (off the 4px scale) on .task-main
+  REFLEX 24b :1 padding: 5px 9px (off the 4px scale) on .task-status
+  REFLEX 24b :1 padding: 28px 18px (off the 4px scale) on .empty-state
+  REFLEX 24b :1 margin-bottom: 11px (off the 4px scale) on .empty-symbol
+  REFLEX 24b :1 margin: 0 0 7px (off the 4px scale) on .empty-state h3
+  REFLEX 24b :1 gap: 42px (off the 4px scale) on .home-lower
+  REFLEX 24b :1 margin-top: 50px (off the 4px scale) on .home-lower
+  REFLEX 24b :1 gap: 9px (off the 4px scale) on .project-tile
+  REFLEX 24b :1 padding: 22px 22px 20px (off the 4px scale) on .rules-note
+  REFLEX 24b :1 margin: 0 0 9px (off the 4px scale) on .rules-note p
+  REFLEX 24b :1 margin-bottom: 27px (off the 4px scale) on .composer-main .page-head
+  REFLEX 24b :1 padding: 12px 13px (off the 4px scale) on .brief-form textarea,.brief-form input,.brief-form select,.modal-card input,.…
+  REFLEX 24b :1 gap: 10px (off the 4px scale) on .field-hint
+  REFLEX 24b :1 margin: 7px 2px 23px (off the 4px scale) on .field-hint
+  REFLEX 24b :1 gap: 13px (off the 4px scale) on .two-fields
+  REFLEX 24b :1 gap: 7px (off the 4px scale) on .two-fields label,.brief-form>label:not(.field-label)
+  REFLEX 24b :1 margin-bottom: 17px (off the 4px scale) on .two-fields label,.brief-form>label:not(.field-label)
+  REFLEX 24b :1 padding: 19px 0 0 (off the 4px scale) on .format-field
+  REFLEX 24b :1 margin: 2px 0 18px (off the 4px scale) on .format-field
+  REFLEX 24b :1 gap: 9px (off the 4px scale) on .format-field
+  REFLEX 24b :1 padding: 0 0 11px (off the 4px scale) on .format-field legend
+  REFLEX 24b :1 padding: 11px 12px (off the 4px scale) on .format-option
+  REFLEX 24b :1 gap: 3px (off the 4px scale) on .format-option span:last-child
+  REFLEX 24b :1 padding: 13px 0 (off the 4px scale) on .source-box
+  REFLEX 24b :1 gap: 14px (off the 4px scale) on .source-box
+  REFLEX 24b :1 gap: 10px (off the 4px scale) on .source-box>div
+  REFLEX 24b :1 gap: 3px (off the 4px scale) on .source-box>div span:last-child
+  REFLEX 24b :1 padding: 22px 18px (off the 4px scale) on .composer-aside
+  REFLEX 24b :1 margin-bottom: 19px (off the 4px scale) on .aside-asterisk
+  REFLEX 24b :1 margin: 20px 0 22px (off the 4px scale) on .steps
+  REFLEX 24b :1 gap: 19px (off the 4px scale) on .steps
+  REFLEX 24b :1 gap: 11px (off the 4px scale) on .steps li
+  REFLEX 24b :1 padding-top: 13px (off the 4px scale) on .aside-foot
+  REFLEX 24b :1 gap: 25px (off the 4px scale) on .plan-layout
+  REFLEX 24b :1 padding: 23px (off the 4px scale) on .plan-summary,.plan-tasks
+  REFLEX 24b :1 gap: 10px (off the 4px scale) on .plan-label
+  REFLEX 24b :1 gap: 3px (off the 4px scale) on .plan-label div
+  REFLEX 24b :1 padding: 6px 9px (off the 4px scale) on .status-chip
+  REFLEX 24b :1 margin: 0 0 18px (off the 4px scale) on .plan-block
+  REFLEX 24b :1 margin: 7px 0 0 (off the 4px scale) on .plan-block p
+  REFLEX 24b :1 padding-left: 18px (off the 4px scale) on .plan-block ul,.missing-note ul
+  REFLEX 24b :1 padding: 12px 14px (off the 4px scale) on .missing-note
+  REFLEX 24b :1 padding: 3px 0 (off the 4px scale) on .missing-note li
+  REFLEX 24b :1 margin: 3px 0 16px (off the 4px scale) on .plan-tasks>.eyebrow
+  REFLEX 24b :1 gap: 10px (off the 4px scale) on .plan-task
+  REFLEX 24b :1 margin: 6px 0 (off the 4px scale) on .plan-task p
+  REFLEX 24b :1 margin-top: 10px (off the 4px scale) on .plan-actions
+  REFLEX 24b :1 padding-top: 17px (off the 4px scale) on .plan-actions
+  REFLEX 24b :1 gap: 10px (off the 4px scale) on .plan-actions
+  REFLEX 24b :1 margin-bottom: 22px (off the 4px scale) on .run-glyph
+  REFLEX 24b :1 gap: 11px (off the 4px scale) on .run-item
+  REFLEX 24b :1 padding: 14px 3px (off the 4px scale) on .run-item
+  REFLEX 24b :1 margin: -9px 0 19px (off the 4px scale) on .projects-toolbar
+  REFLEX 24b :1 gap: 18px (off the 4px scale) on .project-grid
+  REFLEX 24b :1 padding: 13px 13px 14px (off the 4px scale) on .project-card-body
+  REFLEX 24b :1 gap: 5px (off the 4px scale) on .project-card-body>span:first-child
+  REFLEX 24b :1 gap: 38px (off the 4px scale) on .project-detail-grid
+  REFLEX 24b :1 gap: 11px (off the 4px scale) on .source-row
+  REFLEX 24b :1 margin-top: 30px (off the 4px scale) on .rule-explainer
+  REFLEX 24b :1 padding-top: 18px (off the 4px scale) on .rule-explainer
+  REFLEX 24b :1 padding: 29px (off the 4px scale) on .modal-card
+  REFLEX 24b :1 margin: 11px 0 (off the 4px scale) on .modal-card h2
+  REFLEX 24b :1 gap: 7px (off the 4px scale) on .modal-card label
+  REFLEX 24b :1 margin: 15px 0 (off the 4px scale) on .modal-card label
+  REFLEX 24b :1 gap: 10px (off the 4px scale) on .modal-actions
+  REFLEX 24b :1 margin-top: 18px (off the 4px scale) on .modal-actions
+  REFLEX 24b :1 padding: 13px 0 (off the 4px scale) on .registry-rule
+  REFLEX 24b :1 margin: 7px 0 1px (off the 4px scale) on .registry-rule p
+  REFLEX 24b :1 gap: 15px (off the 4px scale) on .planner-toolbar
+  REFLEX 24b :1 gap: 3px (off the 4px scale) on .segmented
+  REFLEX 24b :1 padding: 3px (off the 4px scale) on .segmented
+  REFLEX 24b :1 padding: 8px 15px (off the 4px scale) on .segmented button
+  REFLEX 24b :1 margin: 0 0 25px (off the 4px scale) on .planner-group
+  REFLEX 24b :1 gap: 9px (off the 4px scale) on .group-label
+  REFLEX 24b :1 margin-bottom: 7px (off the 4px scale) on .group-label
+  REFLEX 24b :1 margin: 0 0 14px (off the 4px scale) on .calendar-head
+  REFLEX 24b :1 padding: 7px (off the 4px scale) on .calendar-day
+  REFLEX 24b :1 padding: 3px 4px (off the 4px scale) on .calendar-event
+  REFLEX 24b :1 padding: 20px 3px 16px (off the 4px scale) on .calendar-selected
+  REFLEX 24b :1 margin-bottom: 15px (off the 4px scale) on .calendar-selected
+  REFLEX 24b :1 margin-bottom: 10px (off the 4px scale) on .calendar-selected .eyebrow
+  REFLEX 24b :1 gap: 14px (off the 4px scale) on .unscheduled
+  REFLEX 24b :1 gap: 13px (off the 4px scale) on .history-item
+  REFLEX 24b :1 gap: 5px (off the 4px scale) on .history-item>span:nth-child(2)
+  REFLEX 24b :1 margin-left: 6px (off the 4px scale) on .audit-list
+  REFLEX 24b :1 padding: 0 0 18px (off the 4px scale) on .audit-row
+  REFLEX 24b :1 gap: 5px (off the 4px scale) on .audit-copy
+  REFLEX 24b :1 margin: 8px 0 5px (off the 4px scale) on .settings-row h3
+  REFLEX 24b :1 padding: 14px (off the 4px scale) on .settings-foot
+  REFLEX 24b :1 padding: 30px (off the 4px scale) on .fatal
+  REFLEX 24b :1 margin: 7px 0 (off the 4px scale) on .workbench-heading h1
+  REFLEX 24b :1 gap: 22px (off the 4px scale) on .workbench-grid
+  REFLEX 24b :1 padding: 20px 22px (off the 4px scale) on .draft-column
+  REFLEX 24b :1 margin-bottom: 18px (off the 4px scale) on .draft-toolbar
+  REFLEX 24b :1 gap: 9px (off the 4px scale) on .draft-toolbar>div
+  REFLEX 24b :1 padding: 3px 6px (off the 4px scale) on .version-pill
+  REFLEX 24b :1 padding: 15px (off the 4px scale) on .draft-preview.script-preview
+  REFLEX 24b :1 gap: 9px (off the 4px scale) on .edit-actions
+  REFLEX 24b :1 margin-top: 10px (off the 4px scale) on .edit-actions
+  REFLEX 24b :1 margin-top: 34px (off the 4px scale) on .version-section
+  REFLEX 24b :1 margin-bottom: 9px (off the 4px scale) on .version-section .section-line
+  REFLEX 24b :1 padding: 10px 12px (off the 4px scale) on .version-diff summary
+  REFLEX 24b :1 margin-right: 7px (off the 4px scale) on .version-diff summary::before
+  REFLEX 24b :1 margin: 0 0 3px (off the 4px scale) on .diff-line
+  REFLEX 24b :1 padding: 2px 5px (off the 4px scale) on .diff-line
+  REFLEX 24b :1 padding: 4px 5px (off the 4px scale) on .version-node
+  REFLEX 24b :1 gap: 14px (off the 4px scale) on .workbench-grid aside
+  REFLEX 24b :1 padding: 17px 16px (off the 4px scale) on .review-panel
+  REFLEX 24b :1 gap: 9px (off the 4px scale) on .review-header
+  REFLEX 24b :1 padding-bottom: 13px (off the 4px scale) on .review-header
+  REFLEX 24b :1 padding: 5px 7px (off the 4px scale) on .verdict-badge
+  REFLEX 24b :1 padding: 14px 0 (off the 4px scale) on .finding
+  REFLEX 24b :1 gap: 7px (off the 4px scale) on .finding-title
+  REFLEX 24b :1 margin: 9px 0 6px (off the 4px scale) on .finding blockquote
+  REFLEX 24b :1 padding-left: 9px (off the 4px scale) on .finding blockquote
+  REFLEX 24b :1 margin: 7px 0 (off the 4px scale) on .finding>p
+  REFLEX 24b :1 padding: 8px 9px (off the 4px scale) on .rule-citation
+  REFLEX 24b :1 margin: 9px 0 (off the 4px scale) on .rule-citation
+  REFLEX 24b :1 margin: 5px 0 0 (off the 4px scale) on .rule-citation p
+  REFLEX 24b :1 margin-top: 6px (off the 4px scale) on .evidence-link,.evidence-missing
+  REFLEX 24b :1 margin-top: 10px (off the 4px scale) on .recommendation
+  REFLEX 24b :1 margin-top: 7px (off the 4px scale) on .invalid-ref
+  REFLEX 24b :1 padding: 24px 5px (off the 4px scale) on .review-clean
+  REFLEX 24b :1 margin: 6px (off the 4px scale) on .review-clean strong
+  REFLEX 24b :1 padding-top: 13px (off the 4px scale) on .remediation-box,.escalation-note
+  REFLEX 24b :1 margin: 5px 0 11px (off the 4px scale) on .remediation-box p,.escalation-note p
+  REFLEX 24b :1 gap: 10px (off the 4px scale) on .human-gate
+  REFLEX 24b :1 margin-top: 13px (off the 4px scale) on .human-gate
+  REFLEX 24b :1 margin: 5px 0 0 (off the 4px scale) on .human-gate p
+  REFLEX 24b :1 padding-bottom: 9px (off the 4px scale) on .agent-trail>.eyebrow
+  REFLEX 24b :1 gap: 9px (off the 4px scale) on .agent-step
+  REFLEX 24b :1 padding: 11px 0 (off the 4px scale) on .agent-step
+  REFLEX 24b :1 margin-bottom: 13px (off the 4px scale) on .no-draft p
+  REFLEX 24b :1 padding: 27px clamp(25px,7vw,100px) (off the 4px scale) on .auth-left
+  REFLEX 24b :1 padding: 70px 0 (off the 4px scale) on .auth-message
+  REFLEX 24b :1 gap: 13px (off the 4px scale) on .auth-rule
+  REFLEX 24b :1 margin-top: 42px (off the 4px scale) on .auth-rule
+  REFLEX 24b :1 padding-top: 18px (off the 4px scale) on .auth-rule
+  REFLEX 24b :1 margin-bottom: 13px (off the 4px scale) on .auth-form>.eyebrow
+  REFLEX 24b :1 gap: 7px (off the 4px scale) on .auth-form label
+  REFLEX 24b :1 margin-top: 6px (off the 4px scale) on .auth-form .button
+  REFLEX 24b :1 margin: 17px 0 22px (off the 4px scale) on .auth-switch
+  REFLEX 24b :1 padding: 10px (off the 4px scale) on .inline-error
+  REFLEX 24b :1 margin: -11px 0 17px (off the 4px scale) on .inline-error
+  REFLEX 24b :1 padding: 10px (off the 4px scale) on .inline-note
+  REFLEX 24b :1 margin: -11px 0 17px (off the 4px scale) on .inline-note
+  REFLEX 24b :1 margin-top: 10px (off the 4px scale) on .fatal .button
+  REFLEX 24b :1 padding-left: 11px (off the 4px scale) on .is-collapsed .sidebar
+  REFLEX 24b :1 padding-right: 11px (off the 4px scale) on .is-collapsed .sidebar
+  REFLEX 24b :1 padding-left: 6px (off the 4px scale) on .is-collapsed .brand
+  REFLEX 24b :2 gap: 25px (off the 4px scale) on .home-lower
+  REFLEX 24b :2 gap: 30px (off the 4px scale) on .composer-layout
+  REFLEX 24b :3 padding: 32px 22px 60px (off the 4px scale) on .page-content
+  REFLEX 24b :3 padding: 13px 16px (off the 4px scale) on .composer-aside
+  REFLEX 24b :3 margin: 10px 0 2px (off the 4px scale) on .steps
+  REFLEX 24b :3 gap: 27px (off the 4px scale) on .project-detail-grid
+  REFLEX 24b :3 padding: 20px 23px 10px (off the 4px scale) on .auth-left
+  REFLEX 24b :3 padding: 40px 0 23px (off the 4px scale) on .auth-message
+  REFLEX 24b :3 padding: 5px (off the 4px scale) on .calendar-day
+  REFLEX 24b :3 gap: 15px (off the 4px scale) on .page-head
+  REFLEX 24b :4 padding: 27px 16px 50px (off the 4px scale) on .page-content
+  REFLEX 24b :4 padding-bottom: 35px (off the 4px scale) on .home-actions
+  REFLEX 24b :4 gap: 10px (off the 4px scale) on .project-grid
+  REFLEX 24b :4 padding: 10px (off the 4px scale) on .project-card-body
+  REFLEX 24b :4 gap: 9px (off the 4px scale) on .task-row
+  REFLEX 24b :4 padding: 10px 2px (off the 4px scale) on .task-row
+  REFLEX 24b :4 padding: 4px 6px (off the 4px scale) on .task-status
+  REFLEX 24b :4 padding-top: 14px (off the 4px scale) on .calendar-selected
+  REFLEX 24b :4 padding: 17px (off the 4px scale) on .plan-summary,.plan-tasks
+  REFLEX 24b :4 padding: 23px 18px (off the 4px scale) on .modal-card
+  REFLEX 24b :7 margin: 0 0 18px (off the 4px scale) on .planner-toolbar
+  REFLEX 24b :7 padding: 22px (off the 4px scale) on .planner-calendar,.planner-list-view
+  REFLEX 24b :7 gap: 22px (off the 4px scale) on .calendar-topline
+  REFLEX 24b :7 margin: 0 0 0 3px (off the 4px scale) on .calendar-month h2
+  REFLEX 24b :7 gap: 7px (off the 4px scale) on .month-arrows
+  REFLEX 24b :7 gap: 10px (off the 4px scale) on .calendar-filters
+  REFLEX 24b :7 padding: 0 28px 0 10px (off the 4px scale) on .calendar-filters select
+  REFLEX 24b :7 gap: 10px (off the 4px scale) on .planner-insights
+  REFLEX 24b :7 gap: 11px (off the 4px scale) on .planner-insight
+  REFLEX 24b :7 padding: 10px 13px (off the 4px scale) on .planner-insight
+  REFLEX 24b :7 gap: 3px (off the 4px scale) on .planner-insight>span:last-child
+  REFLEX 24b :7 padding: 0 10px (off the 4px scale) on .weekday
+  REFLEX 24b :7 padding: 8px 7px (off the 4px scale) on .calendar-day
+  REFLEX 24b :7 gap: 6px (off the 4px scale) on .calendar-day
+  REFLEX 24b :7 padding: 4px 5px (off the 4px scale) on .calendar-event
+  REFLEX 24b :7 margin: 0 0 14px (off the 4px scale) on .calendar-legend
+  REFLEX 24b :7 gap: 6px (off the 4px scale) on .calendar-legend span
+  REFLEX 24b :7 gap: 18px (off the 4px scale) on .calendar-selected
+  REFLEX 24b :7 padding: 23px 2px 17px (off the 4px scale) on .calendar-selected
+  REFLEX 24b :7 margin-bottom: 15px (off the 4px scale) on .calendar-selected
+  REFLEX 24b :7 margin-bottom: 6px (off the 4px scale) on .calendar-selected .eyebrow
+  REFLEX 24b :7 gap: 6px (off the 4px scale) on .agenda-body
+  REFLEX 24b :7 margin: 6px 0 0 (off the 4px scale) on .calendar-selected .planner-note
+  REFLEX 24b :7 margin: 7px 0 (off the 4px scale) on .agenda-empty
+  REFLEX 24b :7 padding: 2px 4px 15px (off the 4px scale) on .list-view-heading
+  REFLEX 24b :7 margin-bottom: 6px (off the 4px scale) on .list-view-heading .eyebrow
+  REFLEX 24b :8 padding: 17px (off the 4px scale) on .planner-calendar
+  REFLEX 24b :9 gap: 7px (off the 4px scale) on .calendar-filters
+  REFLEX 24b :9 padding-left: 7px (off the 4px scale) on .calendar-filters select
+  REFLEX 24b :9 gap: 7px (off the 4px scale) on .planner-insights
+  REFLEX 24b :9 margin-bottom: 14px (off the 4px scale) on .planner-insights
+  REFLEX 24b :9 gap: 7px (off the 4px scale) on .planner-insight
+  REFLEX 24b :9 padding: 7px (off the 4px scale) on .planner-insight
+  REFLEX 24b :9 padding: 5px 3px (off the 4px scale) on .calendar-day
+  REFLEX 24b :9 gap: 3px (off the 4px scale) on .calendar-day
+  REFLEX 24b :9 padding: 4px 3px (off the 4px scale) on .calendar-event
+  REFLEX 24b :9 gap: 9px (off the 4px scale) on .calendar-selected
+  REFLEX 24b :9 padding-left: 3px (off the 4px scale) on .agenda-kind
+  REFLEX 24b :9 gap: 7px (off the 4px scale) on .agenda-entry .task-row
+  REFLEX 24b :9 padding-left: 3px (off the 4px scale) on .agenda-entry .task-row
+  REFLEX 24b :9 padding: 14px (off the 4px scale) on .planner-list-view
+  REFLEX 24b :11 gap: 10px (off the 4px scale) on .plan-task-fields
+  REFLEX 24b :11 gap: 5px (off the 4px scale) on .plan-task-fields label
+  REFLEX 24b :11 padding: 8px 10px (off the 4px scale) on .plan-task-fields input,.plan-task-fields select
+  REFLEX 24b :13 padding: clamp(20px,3vw,38px) (off the 4px scale) on .visual-studio
+  REFLEX 24b :13 margin: 8px 0 10px (off the 4px scale) on .visual-copy h2
+  REFLEX 24b :13 padding: 13px (off the 4px scale) on .visual-copy textarea
+  REFLEX 24b :13 margin-top: 13px (off the 4px scale) on .visual-actions
+  REFLEX 24b :13 gap: 6px (off the 4px scale) on .size-select
+  REFLEX 24b :13 padding: 0 10px (off the 4px scale) on .size-select select
+  REFLEX 24b :13 margin-top: 14px (off the 4px scale) on .visual-note
+  REFLEX 24b :13 gap: 9px (off the 4px scale) on .visual-empty
+  REFLEX 24b :13 padding: 25px (off the 4px scale) on .visual-empty
+  REFLEX 24b :13 padding: 11px 14px (off the 4px scale) on .visual-meta
+  REFLEX 24b :13 padding: 10px 12px (off the 4px scale) on .visual-error
+  REFLEX 24b :13 gap: 10px (off the 4px scale) on .visual-history
+  REFLEX 24b :13 gap: 5px (off the 4px scale) on .visual-thumb
+  REFLEX 24b :16 padding-top: 13px (off the 4px scale) on .format-preferences
+  REFLEX 24b :16 padding: 9px 10px (off the 4px scale) on .format-preferences .format-option
+  REFLEX 24b :16 gap: 6px (off the 4px scale) on .custom-format-label
+  REFLEX 24b :16 padding: 8px 10px (off the 4px scale) on .custom-format-label input
+  REFLEX 24b :16 margin: 0 0 3px (off the 4px scale) on .selection-reason
+  REFLEX 24b :17 padding-left: 18px (off the 4px scale) on .privacy-list
+  REFLEX 24b :17 gap: 6px (off the 4px scale) on .privacy-list
+  REFLEX 24b :17 margin: 18px 0 6px (off the 4px scale) on .rules-modal h3
+  REFLEX 24b :17 margin-top: 14px (off the 4px scale) on .rules-modal .inline-note
+  REFLEX 24b :20 margin: 18px 0 0 (off the 4px scale) on .channel-preferences
+  REFLEX 24b :22 margin: 6px 0 10px (off the 4px scale) on .channel-preferences>p
+  REFLEX 24b :36 margin: 14px 0 (off the 4px scale) on .visual-workflow .visual-version
+  REFLEX 24b :37 gap: 10px (off the 4px scale) on .visual-inspection
+  REFLEX 24b :38 margin-top: 3px (off the 4px scale) on .visual-inspection input
+  REFLEX 24b :39 gap: 10px (off the 4px scale) on .visual-actions,.visual-downloads
+  REFLEX 38iii :1 accented word inside a heading (.welcome-row h1 em) | fix: Set the whole head one way: a line break, a second line at a second size, or the whole head in the accent. Guard: the theme names the coloured word as its signature and it appears once on the page, in the hero
+  REFLEX 38iii :1 accented word inside a heading (.auth-message h1 em)
+  WARN 3 :7 side stripe border-left: 3px solid #8a908b on .calendar-event | fix: Hairline all round, none, or an accent square
+  WARN 3 :7 side stripe border-left: 3px solid on .calendar-legend i
+  WARN 3 :11 side stripe border-left: 3px solid var(--sage-deep) on .marketplace-preview
+  WARN 40 :1 2.38:1 < 4.5:1 on .hero-stamp i | fix: Raise the contrast to threshold
+  WARN 40 :1 4.42:1 < 4.5:1 on .task-symbol.sage
+  WARN 40 :1 3.59:1 < 4.5:1 on .task-symbol.amber
+  WARN 40 :1 3.65:1 < 4.5:1 on .task-status
+  WARN 40 :1 4.02:1 < 4.5:1 on .task-status.approved_pending_human
+  WARN 40 :1 2.42:1 < 4.5:1 on .project-cover
+  WARN 40 :1 2.21:1 < 4.5:1 on .project-tile:nth-child(2) .project-cover
+  WARN 40 :1 2.66:1 < 4.5:1 on .project-tile:nth-child(3) .project-cover
+  WARN 40 :1 4.09:1 < 4.5:1 on .format-icon
+  WARN 40 :1 3.75:1 < 4.5:1 on .status-chip
+  WARN 40 :1 3.97:1 < 4.5:1 on .status-chip.proposed
+  WARN 40 :1 3.90:1 < 4.5:1 on .status-chip.needs
+  WARN 40 :1 2.65:1 < 4.5:1 on .project-card:nth-child(3n+2) .project-cover
+  WARN 40 :1 2.70:1 < 4.5:1 on .project-card:nth-child(3n) .project-cover
+  WARN 40 :1 3.47:1 < 4.5:1 on .weekday
+  WARN 40 :1 1.77:1 < 4.5:1 on .calendar-day.outside
+  WARN 40 :1 3.68:1 < 4.5:1 on .settings-foot
+  WARN 40 :1 3.65:1 < 4.5:1 on .agent-avatar.reviewer
+  WARN 40 :1 3.69:1 < 4.5:1 on .agent-avatar.writer
+  WARN 40 :1 3.98:1 < 4.5:1 on .agent-avatar.planner
+  WARN 40 :1 4.21:1 < 4.5:1 on .verdict-badge.pass
+  WARN 40 :1 3.66:1 < 4.5:1 on .verdict-badge.needs
+  WARN 40 :1 3.86:1 < 4.5:1 on .finding-mark
+  WARN 40 :1 3.99:1 < 4.5:1 on .finding-pass .finding-mark
+  WARN 40 :1 4.19:1 < 4.5:1 on .finding-fail .finding-mark
+  WARN 40 :1 3.62:1 < 4.5:1 on .finding-needs .finding-mark
+  WARN F3 :1 no text-wrap: balance on any display head (28 head rule(s), e.g. h1,h2,h3,p) | fix: Add text-wrap: balance to h1/h2-level heads
+  WARN F6 :1 numeric selector .task-status at display size without tabular figures | fix: Add font-variant-numeric: tabular-nums
+  WARN F6 :1 numeric selector .empty-state h3 at display size without tabular figures
+  WARN F6 :1 numeric selector .empty-state p at display size without tabular figures
+  WARN F6 :1 numeric selector .status-chip at display size without tabular figures
+  WARN F6 :1 numeric selector .count-label at display size without tabular figures
+  WARN F6 :1 numeric selector .review-column .empty-state p at display size without tabular figures
+  WARN F6 :7 numeric selector .day-number at display size without tabular figures
+  WARN F7 :1 same container recipe on 6 selectors (.brief-form textarea, .brief-form input, .brief…...) | fix: Vary weight, radius, or fill by role; not every box is the same box
+  WARN F7 :1 same container recipe on 6 selectors (.plan-summary, .plan-tasks, .project-card, .dra…...)
+  WARN F24 :7 a hairline border under a wide soft shadow on .planner-calendar,.planner-list-view | fix: Commit to one: a defined edge, or elevation by shadow
+sloplint: 346 FAIL, 272 REFLEX, 40 WARN across 1 file(s) and 1 URL(s).
+render tier not run: no puppeteer-core found locally, globally or via HALLMARK_PUPPETEER

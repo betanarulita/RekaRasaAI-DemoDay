@@ -81,8 +81,9 @@ python rekarasa_cli.py audit --out audit-log.json --human
 | `task --task <id>` | Detail lengkap: versi, verdict, temuan, `rule_id` |
 | `home` | Hitungan status: perlu revisi / menunggu approval / disetujui |
 | `set-dates --task <id> --deadline ... --publish-at ...` | Tanggal task |
-| `images --task <id>` | Daftar aset gambar yang tersimpan |
-| `generate-image --task <id> --prompt "..." --ratio square` | Buat aset gambar (Pollinations/Flux — gratis, tanpa API key) |
+| `images --task <id>` | Daftar gambar, komposisi, versi copy, dan status approval visual |
+| `compose-visual --image <id> --version <version-id>` | Tempatkan copy versi tersebut pada gambar; berhenti untuk pemeriksaan manusia di workbench |
+| `generate-image --task <id> --prompt "..." --provider comfyui` | Create a concept locally with ComfyUI; no cloud image fallback |
 | `holidays` | Hari besar Indonesia 30 hari ke depan (nasional + keagamaan) |
 | `usage` | Pemakaian token |
 | `reject --task <id> --note "..."` | Minta perubahan / eskalasi |
@@ -101,14 +102,35 @@ Saat menyampaikan temuan Reviewer, **selalu** sertakan:
 Jangan meringkas menjadi "konten kurang bagus". Penolakan tanpa `rule_id`
 tidak bisa diaudit.
 
+## Verifikasi nomor sertifikat (BPOM / BPJPH)
+
+`save_review()` menjalankan `agent/tools/cert_verifier.py` secara deterministik
+pada setiap nomor BPOM (`NA…`) dan sertifikat halal BPJPH (`ID…`) yang muncul
+di draft, terlepas dari pendapat Reviewer. Pangkalan data referensi lokal ada
+di `data/cert_registry_mock.csv` (kolom: `nomor_izin, jenis, nama_produk,
+status, tanggal_expired`).
+
+Aturan:
+
+- Nomor **aktif** tidak menambah temuan; draft boleh lolos (jika aturan lain
+  juga Pass).
+- Nomor **kedaluwarsa**, **dicabut**, atau **tidak terdaftar** menambah temuan
+  `Fail` dengan `rule_reference` = `DEMO-FACT-001` (BPOM) atau `DEMO-HALAL-001`
+  (halal), beserta tanggal kedaluwarsa di `explanation`.
+- Ini **bukan** otorisasi resmi BPOM/BPJPH. Verifikasi hanya pada pangkalan
+  data tiruan lokal. Persetujuan hukum tetap pada Penanggung Jawab / Tim Legal.
+
+Saat melaporkan temuan sertifikat, sebutkan nomor, jenis, dan status (mis.
+"NA18200099999 kedaluwarsa 2024-03-31") agar dapat diaudit.
+
 ## Kalau ada yang gagal
 
 | Kode | Arti | Tindakan |
 |---|---|---|
 | `provider_unconfigured` / `provider_auth` | Kredensial model tidak valid | Laporkan ke pengguna. **Jangan** mengarang konten sebagai gantinya |
 | `provider_rate_limited` / `rate_limited` | Batas laju tercapai | Tunggu ~60 detik, ulangi **sekali**. Jangan mengulang berulang |
-| `image_provider_unconfigured` | IMAGE_PROVIDER tidak diset | Pastikan .env memiliki `IMAGE_PROVIDER=pollinations` |
-| `image_provider_rate_limited` | Pollinations membatasi | Tunggu 30 detik, lalu ulangi |
+| `image_provider_unconfigured` | IMAGE_PROVIDER tidak diset | Laporkan konfigurasi provider yang kurang. Jangan mengganti provider atau menimpa .env |
+| `image_provider_rate_limited` | Provider membatasi | Tunggu 30 detik, lalu ulangi |
 | `image_provider_unavailable` | Provider tidak terjangkau | Cek koneksi internet; coba lagi |
 | `iteration_limit` | Batas 3 remediasi tercapai | Laporkan sisa temuan, sarankan keputusan manusia |
 | `approval_blocked` | Versi terbaru belum `Pass` | Jalankan `revise` atau `review-edit`. Jangan memaksa |
@@ -129,4 +151,15 @@ tidak bisa diaudit.
 - Memanggil `revise` setelah manusia menyunting draft.
 - Menulis atau memperbaiki konten sendiri di luar Writer.
 - Mengklaim konten "sudah terbit" — aplikasi ini tidak punya integrasi
-  publikasi, dan gambar yang dihasilkan **tidak** melewati Reviewer.
+  publikasi. Copy HEADLINE/BODY/CTA/CAPTION melewati Reviewer; gambar dasar masih memerlukan inspeksi manusia, bukan OCR/vision otomatis.
+
+## Konten gambar per kanal
+
+`plan --platforms Instagram TikTok Facebook Threads X Marketplace` memilih kanal secara opsional. Format tetap boleh diinferensikan dari brief. Gunakan paling banyak enam task dan jangan menganggap semua konten TikTok harus berupa video.
+
+Setelah Writer dan Reviewer selesai, `generate-image` memakai provider yang sudah dikonfigurasi. Jalankan `compose-visual` untuk memasang copy tersimpan secara deterministik. Jangan meminta model gambar mengeja headline atau CTA. Kirim ID task dan komposisi kepada manusia agar mereka membuka workbench, menyetujui copy, memeriksa gambar/teks, lalu menyetujui visual. Agent harus berhenti di kedua gerbang approval.
+
+
+### Image provider policy (2026-11-05)
+
+ComfyUI remains the default. Optional Cloudflare text concepts require an explicitly selected provider and server-side configuration; use generate-image --provider cloudflare only when the user selects it. No automatic fallback is allowed. Agnes and Pollinations generation are disabled. The existing adapter uses an SD 1.5 checkpoint, not arbitrary Qwen/FLUX workflows. Compose the original project photo with copy to preserve the supplied product, or protect the product area and edit its background. New concepts do not receive an uploaded photo. Never ask the user to upload the same Project materials again. Preserve previous image records and approval history.

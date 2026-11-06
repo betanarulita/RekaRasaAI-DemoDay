@@ -29,11 +29,11 @@ jobs:
 
       - name: Compile check
         run: |
-          python -m py_compile app.py test_app.py
+          python -m py_compile app.py visual_content.py test_app.py test_visual_content.py test_claim_evaluation.py
 
       - name: Run tests
         run: |
-          python -m pytest test_app.py -q --tb=short
+          python scripts/run_tests.py
 
       - name: Run backup script syntax check
         run: |

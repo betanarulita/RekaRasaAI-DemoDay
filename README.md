@@ -64,7 +64,25 @@ approve            200   task → human_approved
 
 Four findings, one per configured rule, all `Pass`, with the factual rule citing the attached source. Three model calls, no retries.
 
-`46 tests pass` (`pytest test_app.py`). They cover account isolation, CSRF, source and rule reference validation, the cure-claim and halal guards, evidence requirements, bounded remediation, the approval gate, edit-after-approval, provider failure mapping, and migration idempotency.
+`146 tests pass` (`python scripts/run_tests.py`, 2 November 2026). They cover account isolation, CSRF, source and rule reference validation, bounded remediation, FreshGlow rejection/revision, approval persistence, visual snapshots and export gates, provider failures, and migration compatibility. [Actual test output](evidence/creator-agent-tests-2026-11-02.txt).
+
+## Image content for the Creator Agent demo
+
+Channel preferences are optional: Instagram, TikTok, Facebook, Threads, X and
+Marketplace. Writer separates on-image HEADLINE/BODY/CTA from CAPTION and VISUAL.
+The configured image provider generates the base image; the backend places the
+stored copy over it without asking a diffusion model to spell text.
+
+Visual approval requires approved copy and an explicit image inspection. The
+composition stores its exact SVG snapshot, image hash, draft version and approval.
+Editing copy invalidates the old visual export. SVG exports from the server; PNG
+is rendered in the browser. Base-image accuracy still needs human inspection;
+there is no automatic OCR/vision compliance check or publishing integration.
+
+See the [demo guide and handbook mapping](docs/CREATOR_AGENT_DEMO_2026-11-02.md),
+[validation report](evidence/creator-agent-validation-2026-11-02.md), and
+[240-case synthetic evaluation datacard](evaluation/DATACARD.md). Synthetic cases
+are evaluation fixtures, not real product evidence or independently verified labels.
 
 ## How WorkBuddy participates
 
@@ -79,7 +97,7 @@ It is an adapter, not an authority. The CLI is a thin HTTP client with no rules 
 - Server-side Groq Chat Completions calls with strict JSON Schema contracts for all three roles. The server validates every response against the local contract before use.
 - A plan must be confirmed before tasks can generate drafts. Each revision creates a new immutable version; history is never overwritten.
 - A maximum of three remediation attempts per task, then human escalation. Human approval requires a passing review of the latest version.
-- Content Studio can generate and persist a PNG per task through OpenAI Images or a local ComfyUI server.
+- Content Studio supports the configured image provider (ComfyUI by default, optional Cloudflare text concepts), versioned text composition, explicit visual approval, and SVG/browser PNG export.
 - Planner list and calendar views; production deadlines and planned publication times are separate fields. No publishing integration is configured and the app never reports a publication.
 - Plain text and Markdown upload, capped at 250 KB. PDF extraction is not implemented.
 - A data disclosure at `GET /api/privacy` and in Settings that names which fields reach the text and image providers, which never do, what is retained, and what is still missing. It is an honest disclosure, not a privacy policy.
@@ -89,7 +107,7 @@ It is an adapter, not an authority. The CLI is a thin HTTP client with no rules 
 Requirements: Python 3.10+ (developed and tested on 3.12). The application uses a small standard-library `.env` loader, so no dotenv package is required. `waitress` is used by the production Docker image.
 
 1. Copy `.env.example` to `.env` if you do not already have one; the app reads it at startup and never replaces variables already set in the process environment.
-2. Set `GROQ_API_KEY` for live text generation. For OpenAI image generation, set `OPENAI_API_KEY`. For local ComfyUI, set `IMAGE_PROVIDER=comfyui`, `COMFYUI_URL` (default `http://127.0.0.1:8188`), and `COMFYUI_CHECKPOINT` to the exact installed checkpoint filename.
+2. Set `GROQ_API_KEY` for live text generation. Image generation defaults to local ComfyUI; Cloudflare text concepts require explicit selection and setup in [the Cloudflare guide](docs/CLOUDFLARE_IMAGE_SETUP.md); see [image provider setup](docs/IMAGE_PROVIDER_SETUP.md).
 3. Start with `python app.py` from this directory.
 4. Open `http://127.0.0.1:8000`, create an account, and start in the seeded **Demo · Jahe Rasa** project.
 
@@ -98,7 +116,7 @@ The app creates `data/rekarasa.sqlite3`, stores image files in `data/generated-i
 ## Tests and checks
 
 ```
-python -m pytest test_app.py -q     # 66 passed
+python scripts/run_tests.py        # 146 passed; SMTP/credentials/network isolated
 python -m py_compile app.py test_app.py
 node --check static/app.js
 node probe_frontend.js              # calendar and diff behaviour
@@ -114,7 +132,7 @@ date counted twice in the open-count badge, and the item needing attention was
 pushed behind the "+1 more" marker. It is not a browser and makes no claim about
 layout.
 
-**Not verified:** the ComfyUI image path has only fake-service coverage — no local ComfyUI server was reachable, so `IMAGE_PROVIDER=comfyui` is exercised by tests but has not produced a real image here. There is also no public deployment URL; everything above was run locally.
+**Verified locally (6 November 2026):** the selected-image edit path was run against the local ComfyUI server at `http://127.0.0.1:8188` using the installed `v1-5-pruned-emaonly.safetensors` checkpoint. A real reference-derived PNG was generated and persisted as a new unapproved image/composition while the original image remained intact. The text planner was stubbed in this harness to avoid external model calls; the image inference itself used the local ComfyUI GPU path. There is also no public deployment URL; everything above was run locally.
 
 
 ## Environment variables
@@ -128,9 +146,7 @@ layout.
 | `LLM_PROVIDER` | Provider selector (currently Groq) | `groq` |
 | `GROQ_API_KEY` | Server-only Groq API credential | unset; agent calls fail clearly |
 | `MODEL` | Groq text model ID | `openai/gpt-oss-20b` |
-| `IMAGE_PROVIDER` | Image provider (`openai` or `comfyui`) | `openai` |
-| `OPENAI_API_KEY` | Server-only OpenAI Images credential | unset; image action reports setup instructions |
-| `IMAGE_MODEL` | OpenAI image generation model | `gpt-image-2.5-sunburst` |
+| `IMAGE_PROVIDER` | Default engine; optional Cloudflare requires explicit selection | `comfyui` |
 | `COMFYUI_URL` | Local ComfyUI server base URL | `http://127.0.0.1:8188` |
 | `COMFYUI_CHECKPOINT` | Installed SD 1.5 checkpoint filename used by ComfyUI | unset; required when provider is `comfyui` |
 | `COMFYUI_TIMEOUT` | Maximum time to wait for ComfyUI generation (seconds, capped at 900) | `300` |
@@ -157,9 +173,16 @@ No hosting account is bundled with this project. Live inference should be verifi
 
 The `DEMO-*` rules are sample product policies, not legal requirements, legal advice, a halal certification assessment, or a complete advertising-compliance engine. A Reviewer model result is only one part of the process: code validates schema, ownership, rule IDs and source IDs, evidence requirements, approval transitions, and attempt limits. Uncertain findings should remain `Needs Evidence` or go to a human.
 
+### Cakupan Batas Kepatuhan Hukum (Legal Compliance Disclaimer)
+
+Verifikasi yang dilakukan RekaRasa.ai beroperasi pada tingkat **pencocokan aturan tekstual (*rulebook-based matching*)** dan **pangkalan data referensi lokal** (`data/cert_registry_mock.csv`), bukan otorisasi hukum resmi dari instansi pemerintah (BPOM/BPJPH). Sistem memeriksa apakah nomor registrasi BPOM dan sertifikat halal BPJPH yang dikutip muncul di registri tiruan lokal; sistem **tidak** melakukan pencarian *real-time* ke pangkalan data resmi BPOM atau BPJPH, dan **tidak** menerbitkan temuan pelanggaran statutory pasal-demi-pasal.
+
+Agent dirancang sebagai **penyaring lini pertama (*first-line compliance filter*)** yang membantu kreator meminimalkan risiko pelanggaran sebelum konten sampai ke tim legal. Persetujuan akhir hukum tetap berada di tangan **Penanggung Jawab / Tim Legal** perusahaan. Agent tidak menggantikan fungsi hukum; agent memastikan bahwa saat konten sampai ke tim legal, masalah yang dapat dideteksi secara tekstual sudah disaring. Dokumen lengkap mengenai batas kepatuhan ini ada di `submission/02_accountability_sheet.md`.
+
 ## Known limits
 
 - PDF text extraction, email verification, external identity providers, multi-seat collaboration, background queues, scheduled publishing, and platform publishing are not implemented.
+- No official BPOM or BPJPH certificate verification is performed. Certificate checks use a local mock registry (`data/cert_registry_mock.csv`); a `Pass` means the number is present and active in that local data, not that BPOM or BPJPH has authorized the product.
 - Password reset works without a mail server: the server prints a single-use token to its own console and the person pastes it back. Nothing is emailed.
 - SQLite and the embedded server target one low-volume demo instance. Use managed Postgres and a production-grade job/server architecture before multi-instance or high-traffic use.
 - Model calls can fail from invalid credentials, provider limits, timeouts, malformed data, or unavailable network; the UI reports the failure and preserves a retry path where possible.

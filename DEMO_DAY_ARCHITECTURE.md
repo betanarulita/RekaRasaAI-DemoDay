@@ -122,7 +122,7 @@
 | Image generation | Pollinations.ai (Flux) | Free, no key | Good quality; ~1 img/45s limit — pre-generate for demo |
 | Hosting | Render (starter) | Free/$7 mo | Docker, health checks, persistent disk |
 | Database | SQLite (WAL mode) | Free | File-based, no server needed, adequate for demo |
-| Email | SMTP (optional) | Free (Gmail) | Password reset, email verification |
+| Email | Local Mailbox (staging) or SMTP (production) | Free | Password reset, email verification |
 | Error tracking | Sentry (optional) | Free tier | 5K events/month free |
 | CI/CD | GitHub Actions | Free | 2000 min/month free for public repos |
 | Backup | scripts/backup_db.py | Free | SQLite online backup API |

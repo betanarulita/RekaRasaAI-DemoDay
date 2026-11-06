@@ -1,0 +1,108 @@
+{
+  "reviewed_on": "2026-11-02",
+  "scope": "Policy-to-reference mapping for content review. Product category and legal applicability require confirmation; policy Pass is not legal certification.",
+  "references": [
+    {
+      "id": "BPOM-3-2022",
+      "title": "PerBPOM 3/2022 — Persyaratan Teknis Klaim Kosmetika",
+      "url": "https://peraturan.bpk.go.id/Details/223958/peraturan-bpom-no-3-tahun-2022",
+      "kind": "regulation_reference",
+      "scope": "Cosmetic claims; verify category, claim wording, substantiation, and current instrument before a legal conclusion.",
+      "related_policy_ids": [
+        "DEMO-CLAIM-001",
+        "DEMO-FACT-001"
+      ]
+    },
+    {
+      "id": "BPOM-18-2024",
+      "title": "PerBPOM 18/2024 — Penandaan, Promosi, dan Iklan Kosmetik",
+      "url": "https://peraturan.bpk.go.id/Download/370524/Peraturan%20BPOM%20Nomor%2018%20Tahun%202024.pdf",
+      "kind": "regulation_reference",
+      "scope": "Cosmetics advertising, evidence for benefit claims and restrictions on testimonials/certification representations. Not a rule for every product category.",
+      "related_policy_ids": [
+        "DEMO-CLAIM-001",
+        "DEMO-FACT-001",
+        "DEMO-HALAL-001"
+      ],
+      "checked_on": "2026-11-04",
+      "category": "cosmetics_only",
+      "provisions": [
+        {
+          "location": "Pasal 2 ayat (3)",
+          "summary": "Promosi kosmetik harus objektif, jujur dan tidak menyesatkan; tidak memberi kesan sebagai obat atau pencegah penyakit."
+        },
+        {
+          "location": "Pasal 13 ayat (1)-(2)",
+          "summary": "Promosi memerlukan notifikasi kosmetik dan kesesuaian informasi notifikasi."
+        },
+        {
+          "location": "Pasal 17; Lampiran VI II.3.d dan II.4.d",
+          "summary": "Klaim manfaat dan pernyataan sertifikasi tertentu memerlukan bukti yang dapat dipertanggungjawabkan."
+        },
+        {
+          "location": "Pasal 5 ayat (1)-(3)",
+          "summary": "Label halal pada penandaan kosmetik dicantumkan setelah sertifikat halal diperoleh. Ketentuan ini mengenai penandaan, bukan bukti otomatis bahwa setiap iklan patuh."
+        }
+      ]
+    },
+    {
+      "id": "KOMINFO-SE9-2023",
+      "title": "SE Menkominfo 9/2023 — Etika Kecerdasan Artifisial",
+      "url": "https://jdih.komdigi.go.id/produk_hukum/view/id/883/t/surat%2Bedaran%2Bmenteri%2Bkomunikasi%2Bdan%2Binfomatika%2Bnomor%2B9%2Btahun%2B2023",
+      "kind": "ethical_guidance",
+      "scope": "Ethical guidance: transparency, accountability, security and personal data protection. Do not describe a circular as an AI certification scheme.",
+      "related_policy_ids": []
+    },
+    {
+      "id": "UU-PDP-27-2022",
+      "title": "UU 27/2022 — Pelindungan Data Pribadi",
+      "url": "https://jdih.komdigi.go.id/produk_hukum/view/id/832/t/crc32/",
+      "kind": "law_reference",
+      "scope": "Processing of personal data, data subject rights and controller obligations; export/delete endpoints alone do not establish compliance.",
+      "related_policy_ids": []
+    },
+    {
+      "id": "BPJPH-CERTIFICATE-CHECK",
+      "title": "BPJPH — kanal resmi informasi jaminan produk halal",
+      "url": "https://bpjph.halal.go.id/",
+      "kind": "verification_entrypoint",
+      "scope": "Verify the actual product, holder, certificate and applicable rules. No certificate lookup or mandatory-halal deadline engine is implemented. An uploaded source is not independent certificate validation.",
+      "related_policy_ids": [
+        "DEMO-HALAL-001"
+      ]
+    },
+    {
+      "id": "UU-PK-8-1999",
+      "title": "UU 8/1999 - Perlindungan Konsumen",
+      "url": "https://peraturan.bpk.go.id/Download/33784/UU%20Nomor%208%20Tahun%201999.pdf",
+      "kind": "law_reference",
+      "checked_on": "2026-11-04",
+      "category": "consumer_goods_and_services",
+      "scope": "Rujukan umum informasi promosi kepada konsumen; konfirmasi konteks usaha dan ketentuan sektoral.",
+      "related_policy_ids": [
+        "DEMO-FACT-001",
+        "DEMO-CLAIM-001"
+      ],
+      "provisions": [
+        {
+          "location": "Pasal 9 ayat (1)",
+          "summary": "Melarang promosi tidak benar mengenai karakteristik, standar, potongan harga dan keadaan barang/jasa."
+        },
+        {
+          "location": "Pasal 10",
+          "summary": "Melarang pernyataan tidak benar atau menyesatkan mengenai harga, kegunaan, kondisi, jaminan, diskon, hadiah dan bahaya penggunaan."
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Legal references are not automatically applied as article-level legal verdicts.",
+    "No automated BPOM notification or BPJPH certificate verification.",
+    "Model citation validation checks identity/location; it does not prove semantic entailment of every claim.",
+    "No OCR or vision review of the base image. A person inspects it and the rendered text before visual approval.",
+    "AI-provider data processing agreements, retention policy and legal basis require operator review.",
+    "Changes in AI and halal regulation must be checked before deployment; no current regulatory completeness claim is made.",
+    "Checked provisions are paraphrased editorial references, not a full amendment-status review or an automated finding of statutory breach. Historical reviews are not retrospectively reclassified."
+  ],
+  "map_version": "2026-11-04.1"
+}
