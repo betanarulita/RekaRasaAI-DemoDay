@@ -857,3 +857,5 @@ body{background:linear-gradient(180deg,#fbfbff 0%,var(--brand-paper) 100%);color
 .home-focus .home-heading{margin-bottom:20px}
 .home-focus textarea{min-height:188px;padding:20px 22px;line-height:1.7}
 @media(max-width:600px){.page-content:has(.home-focus){padding-inline:16px}.home-focus .home-composer{padding:18px;border-radius:14px}.home-focus textarea{min-height:164px;padding:16px}}
+.optional-note{background:#eef0fb;color:#41409a}
+.optional-note p{margin:6px 0 0;font-size:.73rem;line-height:1.55}

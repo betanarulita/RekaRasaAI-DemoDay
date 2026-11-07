@@ -1669,6 +1669,170 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("nologo=true", captured_url[0])
 
 
+class FlexibleBriefTests(unittest.TestCase):
+    """An ordinary campaign brief must not be blocked by optional details.
+
+    The Planner used to list price, variants, discount and stock as gaps. The
+    backend treated any gap as fatal and answered with needs_clarification, so
+    the user got a red "Please clarify" toast and no plan at all.
+    """
+
+    def setUp(self):
+        app.DB_PATH = Path(TEMP.name) / (self.id().replace(".", "_") + ".sqlite3")
+        if app.DB_PATH.exists():
+            app.DB_PATH.unlink()
+        app.init_db()
+        app.RATE_HITS.clear()
+        app.LOGIN_HITS.clear()
+
+    def request(self, path, method="GET", body=None, cookie=None, csrf=None):
+        raw = json.dumps(body or {}).encode()
+        route, _, query = path.partition("?")
+        env = {"REQUEST_METHOD": method, "PATH_INFO": route, "QUERY_STRING": query, "CONTENT_LENGTH": str(len(raw)), "wsgi.input": io.BytesIO(raw), "HTTP_HOST": "localhost"}
+        if cookie:
+            env["HTTP_COOKIE"] = cookie
+        if csrf:
+            env["HTTP_X_CSRF_TOKEN"] = csrf
+        captured = {}
+        result = app.application(env, lambda status, headers: captured.update(status=status, headers=dict(headers)))
+        raw_result = b"".join(result)
+        try:
+            data = json.loads(raw_result)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            data = raw_result
+        return int(captured["status"].split()[0]), captured["headers"], data
+
+    def register(self, email="owner@example.test"):
+        with patch.object(app, "SMTP_ENABLED", True), patch.object(app, "send_email", return_value=True) as delivery:
+            status, headers, pending = self.request("/api/register", "POST", {"email": email, "password": "test-password-123"})
+            self.assertEqual(status, 202, pending)
+            self.assertNotIn("Set-Cookie", headers)
+            code = re.search(r"\b[0-9]{6}\b", delivery.call_args.args[2]).group()
+            status, headers, body = self.request("/api/register/verify", "POST", {"email": email, "code": code, "challenge": pending["challenge"]})
+        self.assertEqual(status, 200, body)
+        cookie = headers["Set-Cookie"].split(";", 1)[0]
+        return cookie, body["csrf"], body["user"]["id"]
+
+    def project(self, owner, name="Test project"):
+        db = app.connect()
+        project_id = app.uid()
+        db.execute("INSERT INTO projects VALUES(?,?,?,?)", (project_id, owner, name, app.now()))
+        db.commit()
+        db.close()
+        return project_id
+
+    OPTIONAL_GAPS = ["Product price", "Product variants", "Exact discount amount or percentage", "Stock availability"]
+
+    def test_optional_detail_gaps_do_not_block_the_plan(self):
+        cookie, csrf, owner = self.register()
+        project = self.project(owner)
+        result = planner_result(planner_task("Social media post"), missing_information=list(self.OPTIONAL_GAPS))
+        with patch.object(app, "llm_json", return_value=(result, {"input_tokens": 5, "output_tokens": 6})):
+            status, _, response = self.request(
+                "/api/plan", "POST",
+                {"project_id": project, "brief": "Buatkan promosi untuk kedai Es Cream dengan promo minimal pembelian 65.000"},
+                cookie, csrf)
+        self.assertEqual(status, 201, response)
+        self.assertNotIn("needs_clarification", response)
+        plan = response["plan"]
+        # The gaps are reported, not silently dropped.
+        self.assertEqual(plan["missing_information"], [])
+        self.assertEqual(plan["optional_gaps"], self.OPTIONAL_GAPS)
+        # And the writer is told to leave the unsupported claims out.
+        self.assertIn(app.OPTIONAL_DETAIL_CONSTRAINT, plan["constraints"])
+        self.assertTrue(any("Product price" in c for c in plan["constraints"]))
+
+    def test_optional_gaps_still_reach_the_writer_as_constraints(self):
+        cookie, csrf, owner = self.register()
+        project = self.project(owner)
+        result = planner_result(planner_task("Social media post"), missing_information=list(self.OPTIONAL_GAPS))
+        writer_payloads = []
+
+        def fake_provider(role, system, payload, output_schema):
+            if role == "Planner":
+                return result, {"input_tokens": 5, "output_tokens": 6}
+            if role == "Writer":
+                writer_payloads.append(payload)
+                return {"drafts": [{"task_id": payload["this_task"]["id"], "content": SAFE_DRAFT, "source_ids": []}]}, {"input_tokens": 1, "output_tokens": 1}
+            return {"findings": []}, {"input_tokens": 1, "output_tokens": 1}
+
+        with patch.object(app, "llm_json", side_effect=fake_provider):
+            status, _, response = self.request(
+                "/api/plan", "POST",
+                {"project_id": project, "brief": "Buatkan promosi untuk kedai Es Cream dengan promo minimal pembelian 65.000"},
+                cookie, csrf)
+        self.assertEqual(status, 201, response)
+        task_id = response["plan"]["tasks"][0]
+        status, _, confirmed = self.request("/api/confirm-plan", "POST", {"plan_id": response["plan_id"], "tasks": [task_id]}, cookie, csrf)
+        self.assertEqual(status, 200, confirmed)
+        with patch.object(app, "llm_json", side_effect=fake_provider):
+            status, _, generated = self.request("/api/generate", "POST", {"task_id": confirmed["tasks"][0]["id"]}, cookie, csrf)
+        self.assertIn(status, (200, 201), generated)
+        # The writer must be told to omit the details the brief never gave.
+        self.assertTrue(writer_payloads, "the writer was never called")
+        plan_sent = writer_payloads[0]["plan"]
+        self.assertIn(app.OPTIONAL_DETAIL_CONSTRAINT, plan_sent["constraints"])
+        self.assertTrue(any("Product price" in c for c in plan_sent["constraints"]))
+        self.assertEqual(plan_sent["missing_information"], [])
+
+    def test_a_genuinely_blocking_gap_still_asks_the_user(self):
+        cookie, csrf, owner = self.register()
+        project = self.project(owner)
+        result = planner_result(planner_task("Social media post"), missing_information=["No product was described in the brief"])
+        with patch.object(app, "llm_json", return_value=(result, {"input_tokens": 5, "output_tokens": 6})):
+            status, _, response = self.request(
+                "/api/plan", "POST",
+                {"project_id": project, "brief": "Buatkan promosi."},
+                cookie, csrf)
+        self.assertEqual(status, 200, response)
+        self.assertTrue(response["needs_clarification"])
+        self.assertEqual(response["missing_information"], ["No product was described in the brief"])
+
+    def test_classify_splits_blocking_from_optional(self):
+        blocking, optional = app.classify_planner_gaps(self.OPTIONAL_GAPS)
+        self.assertEqual(blocking, [])
+        self.assertEqual(optional, self.OPTIONAL_GAPS)
+        blocking, optional = app.classify_planner_gaps(["Product name is not found in the sources"])
+        self.assertEqual(blocking, ["Product name is not found in the sources"])
+        self.assertEqual(optional, [])
+        # A mixed list keeps both sides.
+        blocking, optional = app.classify_planner_gaps(["Product price", "Which product is this"])
+        self.assertEqual(blocking, ["Which product is this"])
+        self.assertEqual(optional, ["Product price"])
+
+    def test_logistics_details_are_optional_not_blocking(self):
+        """Opening hours, address and contact details never stop the deliverable."""
+        for gap in ("Restaurant opening hours", "Business hours", "Location address", "Phone number", "Store opening hours", "Outlet location", "Delivery address", "Contact number", "Audience age range", "Brand voice"):
+            blocking, optional = app.classify_planner_gaps([gap])
+            self.assertEqual(blocking, [], f"{gap} should not block the plan")
+            self.assertEqual(optional, [gap])
+
+    def test_the_subject_of_the_copy_still_blocks(self):
+        """Without a product, brand or item there is nothing to write about."""
+        for gap in ("Menu name(s)", "Product name", "Which menu item", "The product and the offer itself", "No product was described in the brief"):
+            blocking, optional = app.classify_planner_gaps([gap])
+            self.assertEqual(blocking, [gap], f"{gap} should still ask the user")
+            self.assertEqual(optional, [])
+
+    def test_plural_details_match_their_singular_form(self):
+        for gap in ("Product variants", "Product prices", "Stock levels", "Audiences"):
+            blocking, optional = app.classify_planner_gaps([gap])
+            self.assertEqual(blocking, [], f"{gap} should not block the plan")
+
+    def test_apply_planner_gaps_moves_optional_details_into_constraints(self):
+        plan = {"missing_information": list(self.OPTIONAL_GAPS), "constraints": ["Keep it warm"]}
+        summary = app.apply_planner_gaps(plan)
+        self.assertEqual(summary["blocking"], [])
+        self.assertEqual(summary["optional"], self.OPTIONAL_GAPS)
+        self.assertEqual(plan["missing_information"], [])
+        self.assertIn("Keep it warm", plan["constraints"])
+        self.assertIn(app.OPTIONAL_DETAIL_CONSTRAINT, plan["constraints"])
+
+    def test_planner_instructions_forbid_listing_optional_details_as_gaps(self):
+        source = Path(app.__file__).read_text(encoding="utf-8")
+        self.assertIn("Never list price, discount amount or percentage", source)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
