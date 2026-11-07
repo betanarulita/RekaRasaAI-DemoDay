@@ -4,6 +4,12 @@ RekaRasa is a creator workspace that turns a product brief into marketing copy, 
 
 Built for **AI CAN DO IT — Tencent Cloud Hackathon Indonesia 2026**, Challenge C (The Creator Agent).
 
+## Tim Velo
+
+**Nama anggota:** Kheylina, Beta, Abigailly
+
+[Lihat presentasi Tim Velo](RekaRasa.ai%20%E2%80%94%20Presentasi%20Tim%20Velo%20AI.html).
+
 ![Architecture: three agents propose, a trust boundary separates them from the code that decides, then a human approves](docs/architecture.png)
 
 ## Why this is not a text generator with a review button
