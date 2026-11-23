@@ -1454,6 +1454,10 @@ VISUAL_REVIEW_SCHEMA = schema("visual_review", {
     "next_steps": {"type": "array", "items": {"type": "string"}},
 }, ["verdict", "summary", "findings", "next_steps"])
 
+IMAGE_REVISION_PROMPT_SCHEMA = schema("image_revision_prompt", {
+    "image_prompt": {"type": "string"},
+}, ["image_prompt"])
+
 
 def call_visual_reviewer(image_bytes: bytes, payload: dict) -> tuple[dict, dict]:
     """Ask a Groq vision model to assess the generated base image against its brief."""
@@ -1480,6 +1484,8 @@ def call_visual_reviewer(image_bytes: bytes, payload: dict) -> tuple[dict, dict]
         "For a promotional poster, the base should support one clear promotional concept and leave usable composition space for "
         "the separately supplied headline/body/CTA; do not expect the image model to render text. Flag collages, repeated or "
         "unrequested products, fake packaging or incidental garbled lettering, and a scene that conflicts with the requested format. "
+        "When human_visual_revision_request is supplied, assess whether the image followed that requested change while remaining "
+        "consistent with the campaign brief, Writer direction, and supported product facts. Interpret its intent semantically. "
         "Do not infer product identity or factual attributes from appearance; flag unsupported-looking packaging as a risk, not as fact. "
         "The text Reviewer handles copy claims. Return Pass only when no material visual mismatch remains. Give brief, actionable "
         "findings and next steps in Indonesian. Do not write chain-of-thought."
@@ -3965,10 +3971,27 @@ def visual_snapshot_matches(db, composition) -> bool:
             and hashlib.sha256(composition["svg_content"]).hexdigest() == composition["render_sha256"])
 
 
+def visual_revision_count(db, task_id: str, version_id: str) -> int:
+    revisions = 0
+    for row in db.execute("SELECT details FROM audit_events WHERE task_id=? AND event='image.generated'", (task_id,)):
+        try:
+            details = json.loads(row["details"])
+        except (TypeError, ValueError):
+            continue
+        if isinstance(details, dict) and details.get("copy_version_id") == version_id and details.get("visual_revision_of"):
+            revisions += 1
+    return revisions
+
+
 def visual_status(db, composition) -> str:
     latest = latest_version(db, composition["task_id"])
     if not latest or latest["id"] != composition["version_id"]:
         return "stale"
+    visual_review = db.execute("SELECT verdict FROM visual_reviews WHERE composition_id=? ORDER BY rowid DESC LIMIT 1", (composition["id"],)).fetchone()
+    if visual_revision_count(db, composition["task_id"], composition["version_id"]) >= MAX_ITERATIONS:
+        if composition["approved_at"] and composition["approved_by"]:
+            return "human_approved" if visual_snapshot_matches(db, composition) else "visual_changed"
+        return "visual_limit_reached"
     review = db.execute("SELECT verdict FROM review_runs WHERE version_id=? ORDER BY rowid DESC LIMIT 1", (latest["id"],)).fetchone()
     if not review or review["verdict"] != "Pass" or latest["review_status"] != "pass":
         return "needs_review"
@@ -3976,7 +3999,6 @@ def visual_status(db, composition) -> str:
     approved = db.execute("SELECT id FROM approvals WHERE version_id=? AND decision='approved'", (latest["id"],)).fetchone()
     if not latest["human_approved"] or not task or task["status"] != "human_approved" or not approved:
         return "pending_copy_approval"
-    visual_review = db.execute("SELECT verdict FROM visual_reviews WHERE composition_id=? ORDER BY rowid DESC LIMIT 1", (composition["id"],)).fetchone()
     if visual_review and visual_review["verdict"] != "Pass":
         return "visual_changes_needed"
     # Keep previously human-approved visuals usable; new approvals require a
@@ -3999,8 +4021,10 @@ def serialize_visual(db, row) -> dict:
         "findings": json.loads(review["findings_json"]), "next_steps": json.loads(review["next_steps_json"]),
         "model": review["model"], "created_at": review["created_at"],
     } if review else None)
+    result["human_revision_note"] = str(image_provenance(db, row["task_id"]).get(row["image_id"], {}).get("human_revision_note") or "")[:500]
+    result["visual_revision_count"] = visual_revision_count(db, row["task_id"], row["version_id"])
     result["preview_url"] = "/api/visual-file?id=" + row["id"]
-    result["download_url"] = result["preview_url"] + "&download=1" if result["status"] == "human_approved" else None
+    result["download_url"] = result["preview_url"] + "&download=1" if result["status"] in ("human_approved", "visual_limit_reached") else None
     return result
 
 
@@ -4295,7 +4319,7 @@ def application(environ, start_response):
             return [content]
         if method == "POST":
             require_csrf(environ, session)
-        if method == "POST" and path in ("/api/plan", "/api/generate", "/api/revise", "/api/request-revision", "/api/review-edit", "/api/generate-image", "/api/review-visual", "/api/edit-image-chat", "/api/attachments"):
+        if method == "POST" and path in ("/api/plan", "/api/generate", "/api/revise", "/api/request-revision", "/api/review-edit", "/api/generate-image", "/api/review-visual", "/api/revise-image-direction", "/api/edit-image-chat", "/api/attachments"):
             rate_limit(user_id, path)
         data = read_json(environ) if method == "POST" else {}
         if method == "POST" and path != "/api/delete-task" and data.get("task_id"):
@@ -4413,10 +4437,11 @@ def application(environ, start_response):
                 (composition["task_id"], user_id),
             ).fetchone()
             latest = latest_version(db, task["id"])
+            if task["status"] == "archived":
+                raise APIError(409, "This task is archived. Its visual cannot be reviewed.", "invalid_state")
+            require_review_settled(task)
             if not latest or latest["id"] != composition["version_id"]:
                 raise APIError(409, "This visual belongs to an older copy. Compose the latest approved copy first.", "stale_version")
-            if task["status"] == "reviewing":
-                raise APIError(409, "Wait for the current copy review to finish before reviewing this visual.", "review_in_progress")
             image = db.execute("SELECT * FROM generated_images WHERE id=? AND task_id=?", (composition["image_id"], task["id"])).fetchone()
             if not image:
                 raise APIError(404, "The base image is unavailable.", "image_not_found")
@@ -4440,6 +4465,7 @@ def application(environ, start_response):
                 "format": task["format"], "platform": task["platform"],
                 "title": task["title"], "angle": task["angle"][:500], "goal": task["goal"][:500],
                 "writer_visual_direction": visual_direction[:1200],
+                "human_visual_revision_request": str(image_provenance(db, task["id"]).get(image["id"], {}).get("human_revision_note") or "")[:500],
                 "promotional_copy_overlay": copy,
                 "source_context": source_context,
                 "image_note": "This is the text-free ComfyUI base image. The supplied promotional copy is overlaid separately in the composed preview.",
@@ -4470,6 +4496,95 @@ def application(environ, start_response):
             return json_response(start_response, 200, {"review": {"id": review_id, **review_output, "model": VISUAL_REVIEW_MODEL},
                                                        "composition": serialize_visual(db, updated)})
 
+        if method == "POST" and path == "/api/revise-image-direction":
+            composition_id = str(data.get("composition_id", ""))
+            human_revision_note = data.get("human_revision_note", "")
+            if not isinstance(human_revision_note, str) or len(human_revision_note) > 500:
+                raise APIError(400, "Human image revision notes must be 500 characters or fewer.", "invalid_revision_note")
+            human_revision_note = human_revision_note.strip()
+            composition = db.execute(
+                "SELECT vc.* FROM visual_compositions vc JOIN tasks t ON t.id=vc.task_id "
+                "JOIN projects p ON p.id=t.project_id WHERE vc.id=? AND p.owner_id=?",
+                (composition_id, user_id),
+            ).fetchone()
+            if not composition:
+                raise APIError(404, "Visual composition not found.", "not_found")
+            task = db.execute(
+                "SELECT t.*,b.body AS brief,b.audience,b.tone,p.name AS project_name "
+                "FROM tasks t JOIN plans pl ON pl.id=t.plan_id JOIN briefs b ON b.id=pl.brief_id "
+                "JOIN projects p ON p.id=t.project_id WHERE t.id=? AND p.owner_id=?",
+                (composition["task_id"], user_id),
+            ).fetchone()
+            latest = latest_version(db, task["id"])
+            if task["status"] == "archived":
+                raise APIError(409, "This task is archived. No visual revision was prepared.", "invalid_state")
+            require_review_settled(task)
+            if not latest or latest["id"] != composition["version_id"]:
+                raise APIError(409, "This image belongs to an older copy. Reopen the latest visual first.", "stale_version")
+            review = db.execute(
+                "SELECT * FROM visual_reviews WHERE composition_id=? ORDER BY rowid DESC LIMIT 1",
+                (composition_id,),
+            ).fetchone()
+            if not review or review["verdict"] != "Needs changes":
+                raise APIError(409, "Reka can revise an image only from Raya's latest Needs changes review.", "visual_revision_blocked")
+            revisions_used = visual_revision_count(db, task["id"], latest["id"])
+            if revisions_used >= MAX_ITERATIONS:
+                raise APIError(409, "The three visual revisions have been used. Ask a human to decide or edit the image manually.", "visual_iteration_limit")
+            image = db.execute("SELECT * FROM generated_images WHERE id=? AND task_id=?", (composition["image_id"], task["id"])).fetchone()
+            if not image:
+                raise APIError(404, "The reviewed image is unavailable.", "image_not_found")
+            try:
+                writer_direction = draft_image_blocks(latest["content"]).get("visual", "")
+            except CompositionError:
+                writer_direction = ""
+            sources = source_payload(db, task["project_id"])
+            prompt_payload = {
+                "project": task["project_name"], "brief": task["brief"][:1800],
+                "task": {"title": task["title"], "format": task["format"], "platform": task["platform"],
+                         "angle": task["angle"][:500], "goal": task["goal"][:500]},
+                "writer_visual_direction": writer_direction[:1200],
+                "previous_visual_direction": image["prompt"][:1800],
+                "raya_review": {"summary": review["summary"], "findings": json.loads(review["findings_json"]),
+                                "next_steps": json.loads(review["next_steps_json"])},
+                "human_revision_request": human_revision_note,
+                "documented_source_context": [{"name": str(source.get("name", ""))[:120], "facts": str(source.get("text", ""))[:500]}
+                                               for source in sources[:4] if isinstance(source, dict)],
+            }
+            system = (
+                "You are Reka, the image-prompt writer. Turn the approved campaign context and Raya's visual findings into one "
+                "concise, concrete image-generation prompt in English, optimized for Stable Diffusion 1.5. Describe visible subjects, "
+                "setting, composition, lighting, palette, and mood directly. Resolve the review's meaning, not just its wording. "
+                "Preserve the campaign goal and Writer's visual direction. Apply the human's requested image changes when consistent "
+                "with the brief and Raya's review; interpret their intended meaning rather than matching keywords mechanically. "
+                "Do not invent product packaging, logos, text, certifications, "
+                "product attributes, or extra products. Do not include meta-instructions, explanations, or copy for the image; exact copy "
+                "is overlaid separately. Return only the required JSON object."
+            )
+            try:
+                output, usage = llm_json("Writer", system, prompt_payload, IMAGE_REVISION_PROMPT_SCHEMA)
+            except APIError as exc:
+                record_agent(db, user_id, task["id"], "Writer", {}, False, exc.code, "Image revision prompt could not be prepared.")
+                db.commit()
+                raise
+            image_prompt = output["image_prompt"].strip()[:1800]
+            if not image_prompt:
+                raise APIError(502, "Reka returned an empty visual revision direction.", "provider_schema_invalid")
+            fresh_version = latest_version(db, task["id"])
+            fresh_review = db.execute("SELECT id,verdict FROM visual_reviews WHERE composition_id=? ORDER BY rowid DESC LIMIT 1", (composition_id,)).fetchone()
+            if not fresh_version or fresh_version["id"] != latest["id"] or not fresh_review or fresh_review["id"] != review["id"] or fresh_review["verdict"] != "Needs changes":
+                raise APIError(409, "The copy or image review changed while Reka was preparing the revision. Reload and try again.", "stale_review_context")
+            fresh_revisions_used = visual_revision_count(db, task["id"], latest["id"])
+            if fresh_revisions_used >= MAX_ITERATIONS:
+                raise APIError(409, "The three visual revisions were used while Reka was preparing this one.", "visual_iteration_limit")
+            record_agent(db, user_id, task["id"], "Writer", usage, summary="Prepared a visual revision from Raya's findings.")
+            audit(db, user_id, "writer.visual_revision_prepared", {
+                "composition_id": composition_id, "image_id": image["id"], "version_id": latest["id"],
+                "review_id": review["id"], "visual_revision_count": revisions_used,
+                "human_revision_note": human_revision_note,
+            }, task["project_id"], task["id"])
+            db.commit()
+            return json_response(start_response, 200, {"image_prompt": image_prompt, "version_id": latest["id"]})
+
         if method == "POST" and path == "/api/approve-visual":
             db.execute("BEGIN IMMEDIATE")
             composition = db.execute("SELECT vc.* FROM visual_compositions vc JOIN tasks t ON t.id=vc.task_id JOIN projects p ON p.id=t.project_id WHERE vc.id=? AND p.owner_id=?", (str(data.get("composition_id", "")), user_id)).fetchone()
@@ -4477,7 +4592,7 @@ def application(environ, start_response):
                 raise APIError(404, "Visual composition not found.", "not_found")
             task = db.execute("SELECT * FROM tasks WHERE id=?", (composition["task_id"],)).fetchone()
             status = visual_status(db, composition)
-            if status not in ("pending_visual_approval", "human_approved") or data.get("inspected_image") is not True:
+            if status not in ("pending_visual_approval", "visual_limit_reached", "human_approved") or data.get("inspected_image") is not True:
                 audit(db, user_id, "visual.approval_blocked", {"composition_id": composition["id"], "status": status, "inspected_image": data.get("inspected_image") is True}, task["project_id"], task["id"])
                 db.commit()
                 raise APIError(409, "Approve the latest reviewed copy first, then inspect the image, product details, and displayed text explicitly.", "visual_approval_blocked")
@@ -4488,6 +4603,8 @@ def application(environ, start_response):
                 raise APIError(409, "The saved visual snapshot failed its integrity check.", "visual_changed")
             if not composition["approved_at"]:
                 note = str(data.get("note", ""))[:500]
+                if status == "visual_limit_reached" and not note.strip():
+                    raise APIError(400, "Record a short human decision when approving after the image revision limit.", "human_decision_note_required")
                 db.execute("UPDATE visual_compositions SET approved_by=?,approved_at=?,approval_note=? WHERE id=?", (user_id, now(), note, composition["id"]))
                 audit(db, user_id, "visual.approved", {"composition_id": composition["id"], "version_id": composition["version_id"], "image_id": composition["image_id"], "image_sha256": composition["image_sha256"], "render_sha256": composition["render_sha256"], "note": note, "inspected_image": True}, task["project_id"], task["id"])
             db.commit()
@@ -4500,8 +4617,8 @@ def application(environ, start_response):
             if not composition:
                 raise APIError(404, "Visual composition not found.", "not_found")
             download = query.get("download", [""])[0] == "1"
-            if download and visual_status(db, composition) != "human_approved":
-                raise APIError(409, "This visual needs current copy approval and explicit image approval before export.", "visual_export_blocked")
+            if download and visual_status(db, composition) not in ("human_approved", "visual_limit_reached"):
+                raise APIError(409, "This visual needs a current review, or must reach the three-revision human limit, before export.", "visual_export_blocked")
             image = db.execute("SELECT * FROM generated_images WHERE id=?", (composition["image_id"],)).fetchone()
             base_image = visual_image_bytes(image)
             if hashlib.sha256(base_image).hexdigest() != composition["image_sha256"]:
@@ -4511,7 +4628,7 @@ def application(environ, start_response):
                 raise APIError(409, "The saved visual snapshot failed its integrity check.", "visual_changed")
             headers = [("Content-Type", "image/svg+xml; charset=utf-8"), ("Content-Length", str(len(content))), ("Cache-Control", "private, no-store"), ("X-Content-Type-Options", "nosniff"), ("Content-Security-Policy", "default-src 'none'; img-src data:; sandbox")]
             if download:
-                headers.append(("Content-Disposition", 'attachment; filename="rekarasa-approved-visual.svg"'))
+                headers.append(("Content-Disposition", 'attachment; filename="rekarasa-visual.svg"'))
             start_response("200 OK", headers)
             return [content]
 
@@ -4707,6 +4824,11 @@ def application(environ, start_response):
             task_id = str(data.get("task_id", ""))
             prompt = str(data.get("prompt", "")).strip()
             ratio = str(data.get("ratio", "square"))
+            visual_revision_of = str(data.get("visual_revision_of", ""))
+            human_revision_note = data.get("human_revision_note", "")
+            if not isinstance(human_revision_note, str) or len(human_revision_note) > 500:
+                raise APIError(400, "Human image revision notes must be 500 characters or fewer.", "invalid_revision_note")
+            human_revision_note = human_revision_note.strip()
             if not prompt or len(prompt) > 8000:
                 raise APIError(400, "Image prompt must contain 1–8,000 characters.", "invalid_prompt")
             if ratio not in IMAGE_SIZES:
@@ -4715,9 +4837,22 @@ def application(environ, start_response):
             if not task:
                 raise APIError(404, "Task not found.", "not_found")
             require_review_settled(task)
+            version = latest_version(db, task_id)
+            if visual_revision_of:
+                prior_composition = db.execute(
+                    "SELECT vc.* FROM visual_compositions vc JOIN tasks t ON t.id=vc.task_id JOIN projects p ON p.id=t.project_id WHERE vc.id=? AND vc.task_id=? AND p.owner_id=?",
+                    (visual_revision_of, task_id, user_id),
+                ).fetchone()
+                prior_review = db.execute(
+                    "SELECT verdict FROM visual_reviews WHERE composition_id=? ORDER BY rowid DESC LIMIT 1",
+                    (visual_revision_of,),
+                ).fetchone()
+                if not prior_composition or not version or prior_composition["version_id"] != version["id"] or not prior_review or prior_review["verdict"] != "Needs changes" or str(data.get("mode", "concept")) != "concept":
+                    raise APIError(409, "This image revision no longer matches Raya's latest review. Reload the visual and try again.", "stale_visual_revision")
+                if visual_revision_count(db, task_id, version["id"]) >= MAX_ITERATIONS:
+                    raise APIError(409, "Three Reka image revisions have already been generated for this version. Review or download the available image.", "visual_iteration_limit")
             sources = source_payload(db, task["project_id"])
             contextual_prompt = image_prompt_context(task, task["project_name"], sources)
-            version = latest_version(db, task_id)
             try:
                 writer_direction = draft_image_blocks(version["content"]).get("visual", "") if version else ""
             except CompositionError as exc:
@@ -4726,7 +4861,8 @@ def application(environ, start_response):
             prompt_filtered = prompt_injection_filtered(prompt)
             shared_visual_direction = (
                 f"User's visual direction: {safe_prompt or 'Follow the brief and the Writer visual direction.'}\n"
-                f"Writer's visual direction: {sanitize_image_prompt(writer_direction) or 'Use the campaign brief to guide the visual.'}\n\n"
+                + (f"Human image revision request: {sanitize_image_prompt(human_revision_note)}\n" if visual_revision_of and human_revision_note else "")
+                + f"Writer's visual direction: {sanitize_image_prompt(writer_direction) or 'Use the campaign brief to guide the visual.'}\n\n"
                 f"{contextual_prompt}\n\n"
             )
             combined_prompt = (shared_visual_direction +
@@ -4804,7 +4940,7 @@ def application(environ, start_response):
             try:
                 image_model = cloudflare_images.MODEL if actual_provider == "cloudflare" else (COMFYUI_CHECKPOINT or "local-single-checkpoint")
                 db.execute("INSERT INTO generated_images VALUES(?,?,?,?,?,?,?,?,?,?,?)", (image_id, task["project_id"], task_id, combined_prompt, actual_provider, image_model, actual_size, storage_name, media_type, len(image_bytes), now()))
-                audit(db, user_id, "image.generated", {"image_id": image_id, "provider": actual_provider, "model": image_model, "size": actual_size, "mode": mode, "source_asset_id": asset["id"] if asset else None, "source_sha256": asset["sha256"] if asset else None, "mask_sha256": hashlib.sha256(mask).hexdigest() if mask else None, "strength": strength if asset else None, "seed": generation_seed if actual_provider == "comfyui" else None, "copy_version_id": version["id"] if version else None}, task["project_id"], task_id)
+                audit(db, user_id, "image.generated", {"image_id": image_id, "provider": actual_provider, "model": image_model, "size": actual_size, "mode": mode, "source_asset_id": asset["id"] if asset else None, "source_sha256": asset["sha256"] if asset else None, "mask_sha256": hashlib.sha256(mask).hexdigest() if mask else None, "strength": strength if asset else None, "seed": generation_seed if actual_provider == "comfyui" else None, "copy_version_id": version["id"] if version else None, "visual_revision_of": visual_revision_of or None, "human_revision_note": human_revision_note if visual_revision_of else None}, task["project_id"], task_id)
                 db.commit()
             except Exception:
                 target.unlink(missing_ok=True)
@@ -5660,13 +5796,17 @@ def application(environ, start_response):
             if task["status"] == "human_approved":
                 block_decision("already_approved", "This version is already approved. Create a new version to make changes.", {"version_id": latest["id"]})
             decision = "approved" if path.endswith("approve") else "rejected"
-            if decision == "approved" and (review["verdict"] != "Pass" or task["status"] != "approved_pending_human"):
-                block_decision("approval_blocked", "Human approval requires a passing review of the latest version.", {"version_id": latest["id"], "verdict": review["verdict"], "task_status": task["status"]})
             note = str(data.get("note", ""))[:500]
+            human_override = task["remediation_count"] >= MAX_ITERATIONS and task["status"] in ("escalated", "needs_revision")
+            regular_approval = review["verdict"] == "Pass" and task["status"] == "approved_pending_human"
+            if decision == "approved" and not (regular_approval or human_override):
+                block_decision("approval_blocked", "Human approval requires a passing review or the completed three-revision human decision.", {"version_id": latest["id"], "verdict": review["verdict"], "task_status": task["status"], "remediation_count": task["remediation_count"]})
+            if decision == "approved" and human_override and not note.strip():
+                block_decision("human_decision_note_required", "Add a short note explaining your decision after the revision limit.", {"version_id": latest["id"], "verdict": review["verdict"]})
             db.execute("INSERT INTO approvals VALUES(?,?,?,?,?,?)", (uid(), latest["id"], user_id, decision, note, now()))
             db.execute("UPDATE content_versions SET human_approved=? WHERE id=?", (int(decision == "approved"), latest["id"]))
             db.execute("UPDATE tasks SET status=? WHERE id=?", ("human_approved" if decision == "approved" else "escalated", task_id))
-            audit(db, user_id, "human." + decision, {"version_id": latest["id"], "note": note}, task["project_id"], task_id)
+            audit(db, user_id, "human." + decision, {"version_id": latest["id"], "note": note, "revision_limit_override": bool(decision == "approved" and human_override), "review_verdict": review["verdict"]}, task["project_id"], task_id)
             db.commit()
             return json_response(start_response, 200, {"ok": True, "decision": decision, "task": serialize_task(db, db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone())})
 

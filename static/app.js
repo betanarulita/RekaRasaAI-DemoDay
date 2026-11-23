@@ -410,19 +410,21 @@ function renderPlanReview() {
 }
 async function prepareTaskVisual(task){
  const out=await api('/api/projects');const saved=out.projects.flatMap(project=>project.tasks).find(item=>item.id===task.id);const version=saved?.versions?.at(-1);
- if(!version||!['approved_pending_human','human_approved'].includes(saved.status))throw Error('The copy needs revision before its image can be prepared. Open the review findings below.');
+ if(!version)throw Error('Create a Writer draft before its image can be prepared.');
  const data=await api('/api/images?task_id='+encodeURIComponent(task.id));
- if(data.compositions?.some(item=>item.version_id===version.id))return;
+ const existing=data.compositions?.find(item=>item.version_id===version.id);
+ if(existing){if(!existing.visual_review)await api('/api/review-visual',{method:'POST',body:JSON.stringify({composition_id:existing.id})});return}
  let image;
  if(data.recommended_asset_id){image=(await api('/api/use-project-image',{method:'POST',body:JSON.stringify({task_id:task.id,asset_id:data.recommended_asset_id,ratio:data.default_ratio})})).image}
  else if(data.photo_selection_required||data.project_assets?.length)throw Error('Choose the correct project photo below. More than one match, or a missing catalog photo, needs your choice.');
  else{image=(await api('/api/generate-image',{method:'POST',body:JSON.stringify({task_id:task.id,prompt:data.default_prompt,ratio:data.default_ratio,mode:'concept'})})).image}
- await api('/api/compose-visual',{method:'POST',body:JSON.stringify({image_id:image.id,version_id:version.id})});
+ const layout=await api('/api/compose-visual',{method:'POST',body:JSON.stringify({image_id:image.id,version_id:version.id})});
+ await api('/api/review-visual',{method:'POST',body:JSON.stringify({composition_id:layout.composition.id})});
 }
 async function generateTasks(tasks){
  if(!tasks.length)return showRunResults([],false);
  const task=tasks[0];state.selectedProject=task.project_id||state.plan?.project_id||state.selectedProject;let issue='';
- shell(`<section class="run-state"><h1>${isImageTask(task)?'Creating your image and caption.':'Writing your content.'}</h1><p>Reka writes the copy and Raya checks the claims. Your results are saved in the project for review.</p><p role="status" id="output-progress">${esc(task.title||task.format)} &middot; Writing and reviewing...</p></section>`,'Creating content');
+ shell(`<section class="run-state"><h1>${isImageTask(task)?'Creating your image and caption.':'Writing your content.'}</h1><p>${isImageTask(task)?'Reka writes the copy and visual direction. ComfyUI renders the image, then Raya reviews both before the visual is shown.':'Reka writes the copy and Raya checks the claims.'} Your results are saved in the project for review.</p><p role="status" id="output-progress">${esc(task.title||task.format)} &middot; Writing and reviewing...</p></section>`,'Creating content');
  storeBriefDraft(null);
  try{await api('/api/generate',{method:'POST',body:JSON.stringify({task_id:task.id})});if(isImageTask(task)){const progress=document.querySelector('#output-progress');if(progress)progress.textContent='Preparing the visual from your draft...';await prepareTaskVisual(task)}}catch(error){issue=error.message}
  state.page='workbench';state.selectedTask=task.id;await workbenchPage(task.id);if(issue){if(isImageTask(task))showVisualError(issue);else toast(issue,true)}
@@ -554,13 +556,27 @@ function writerOutputBlocks(content){
  return blocks;
 }
 function simplifyWorkbench(task,current=task.versions?.at(-1)){
+ const humanLimitReached=task.remediation_count>=3&&['escalated','needs_revision'].includes(task.status);
+ if(humanLimitReached){
+  const controls=document.querySelector('.workbench-controls');
+  if(controls&&!controls.querySelector('#human-approve')){controls.insertAdjacentHTML('afterbegin','<button class="button primary" id="human-approve">Approve as human override</button>');controls.querySelector('#human-approve').onclick=()=>humanDecision('approve',task)}
+  const note=document.querySelector('.escalation-note>p,.remediation-box p');
+  if(note)note.textContent='Raya still flags this version after three Reka revisions. You can approve it as a human override or reject it; your decision is recorded.';
+  const reviewPanel=document.querySelector('.review-panel');
+  if(reviewPanel&&!reviewPanel.querySelector('.human-limit-decision')){
+   const gate=document.createElement('div');gate.className='human-gate human-limit-decision';gate.innerHTML='<strong>Human decision required</strong><p>Reka has used all three revisions. Approve the latest version as a human override or reject it.</p>';
+   let reject=document.querySelector('#human-reject');
+   if(!reject){reject=document.createElement('button');reject.type='button';reject.id='human-reject';reject.className='button secondary full';reject.onclick=()=>humanDecision('reject',task)}
+   reject.textContent='Reject as human';gate.append(reject);reviewPanel.append(gate);
+  }
+ }
  document.querySelectorAll('.agent-trail,.source-references,.evidence-detail,.evidence-link,.evidence-missing').forEach(node=>node.remove());
  const review=document.querySelector('.review-panel');
  if(review){
   const wrapper=review.closest('.review-detail');if(wrapper){wrapper.before(review);wrapper.remove()}
   review.querySelectorAll('.finding-pass').forEach(node=>node.remove());
   if(current?.review?.verdict==='Pass'){
-   review.querySelectorAll('.review-header,.human-gate').forEach(node=>node.remove());
+   review.querySelectorAll('.review-header,.human-gate:not(.human-limit-decision)').forEach(node=>node.remove());
    if(!review.querySelector('.finding:not(.finding-pass),.remediation-box,.escalation-note,button,.review-clean'))review.remove();
   }
  }
@@ -599,11 +615,12 @@ async function workbenchPage(id){const out=await api('/api/projects');state.proj
  ${task.status==='escalated'?'<div class="escalation-note"><strong>Human review needed</strong><p>Automatic revisions have stopped. You can still edit this draft manually; saving creates a new version and sends it to Raya for review. Approve it only after the latest review passes.</p><button class="button secondary full" id="human-reject">Record decision</button></div>':''}
  ${task.status==='approved_pending_human'?'<div class="human-gate"><span>✓</span><div><strong>Review passed. Your decision is next.</strong><p>Only a human can approve this version. Editing it creates a new version and clears approval.</p></div></div>':''}
  </section><section class="agent-trail"><div class="eyebrow">AGENT EXCHANGES</div>${task.versions?.length?`<div class="agent-step">${agentAvatar('Writer')}<span><strong>${esc(agentLabel('Writer'))}</strong><small>Version ${current.version} · Source citations validated</small></span></div>${review?`<div class="agent-step">${agentAvatar('Reviewer')}<span><strong>${esc(agentLabel('Reviewer'))}</strong><small>${esc(review.verdict)} · ${findings.length} finding${findings.length===1?'':'s'}</small></span></div>`:''}`:'<p>No agent exchanges recorded yet.</p>'}<div class="agent-step planner">${agentAvatar('Planner')}<span><strong>${esc(agentLabel('Planner'))}</strong><small>Task created from confirmed plan</small></span></div></section></aside></div>
- <section class="visual-studio" aria-labelledby="visual-title"><div class="visual-copy"><h2 id="visual-title">Build the image post.</h2><p id="visual-channel-help">Choose the scene and canvas. Your draft supplies the exact image text; the caption stays separate.</p><label for="image-prompt">Base image direction</label><textarea id="image-prompt" rows="5" maxlength="8000" placeholder="A neutral scene with space for copy..."></textarea><div class="visual-actions"><label class="size-select" for="image-ratio">Canvas<select id="image-ratio"><option value="square">Square (1:1)</option><option value="portrait">Portrait (4:5)</option><option value="story">Vertical (9:16)</option><option value="landscape">Wide (7:4)</option></select></label><button class="button primary" id="generate-visual">Generate new concept</button></div><div class="visual-error" id="visual-error" role="alert" hidden></div><p class="visual-note">New concepts use text only, not your uploaded photo. Use the original photo to preserve your actual product. Inspect every visual before approval.</p><div class="visual-workflow" id="visual-workflow" aria-live="polite">Loading saved visuals...</div></div><div class="visual-preview" id="visual-preview" aria-busy="true"><div class="visual-empty"><strong>Your image post will appear here.</strong><small>Generate a base image, then place the draft copy on it.</small></div></div><div class="visual-history" id="visual-history" aria-label="Saved base images"></div></section>`;
+ <section class="visual-studio" aria-labelledby="visual-title"><div class="visual-copy"><h2 id="visual-title">Reka makes the visual.</h2><p id="visual-channel-help">Reka uses the brief and preferences to shape the image, ComfyUI renders it, and Raya reviews it before display. Uploaded photos remain available as sources.</p><details class="visual-direction-details"><summary>Fine-tune visual direction (optional)</summary><label for="image-prompt">Visual direction</label><textarea id="image-prompt" rows="5" maxlength="8000" placeholder="Reka prepares this from the brief..."></textarea><small>Reka fills this automatically. Edit it only when you want to guide the image yourself.</small></details><div class="visual-actions"><label class="size-select" for="image-ratio">Canvas<select id="image-ratio"><option value="square">Square (1:1)</option><option value="portrait">Portrait (4:5)</option><option value="story">Vertical (9:16)</option><option value="landscape">Wide (7:4)</option></select></label><button class="button primary" id="generate-visual">Generate new concept</button></div><div class="visual-error" id="visual-error" role="alert" hidden></div><div class="visual-workflow" id="visual-workflow" aria-live="polite">Loading saved visuals...</div></div><div class="visual-preview" id="visual-preview" aria-busy="true"><div class="visual-empty"><strong>Your image post will appear here.</strong><small>Generate a base image, then place the draft copy on it.</small></div></div><div class="visual-history" id="visual-history" aria-label="Saved base images"></div></section>`;
  shell(content,'Workbench');const removeTask=document.createElement('button');removeTask.type='button';removeTask.className='text-button task-delete';removeTask.textContent='Delete task';removeTask.onclick=()=>deleteProjectItem('task',task.id,task.project_id);document.querySelector('.workbench-controls').append(removeTask);const siblings=out.projects.flatMap(p=>p.tasks).filter(t=>t.plan_id===task.plan_id).sort((a,b)=>(a.plan_position||0)-(b.plan_position||0));const position=siblings.findIndex(t=>t.id===task.id);const nav=document.createElement('div');nav.className='output-navigation';const count=document.createElement('span');count.textContent='Output '+(position+1)+' of '+siblings.length;nav.append(count);for(const [label,next] of [['Previous',siblings[position-1]],['Next output',siblings[position+1]]]){if(!next)continue;const button=document.createElement('button');button.className='button secondary';button.textContent=label;button.onclick=()=>{if(!next.versions?.length&&next.status==='planned')generateTasks([next]);else openTask(next.id)};nav.append(button)}const projectButton=document.createElement('button');projectButton.className='text-button';projectButton.textContent='All project outputs';projectButton.onclick=()=>openProject(task.project_id);nav.append(projectButton);document.querySelector('.workbench-heading').after(nav);
-if(imageTask){const visual=document.querySelector('.visual-studio');visual.hidden=true;const next=document.createElement('button');next.type='button';next.className='button primary open-image-stage';next.textContent='Create a design from this copy';next.disabled=!current;visual.before(next);next.onclick=async()=>{visual.hidden=false;next.hidden=true;await loadTaskImages(task);visual.scrollIntoView({behavior:'smooth',block:'start'})};if(task.status==='human_approved')document.querySelector('.workbench-heading .status-chip').textContent='Copy approved'}else{document.querySelector('.visual-studio').remove()}navigationBack(document.querySelector('#back-task'),{page:'projects',projectId:task.project_id});document.querySelector('.workbench-controls').insertAdjacentHTML('afterbegin','<button class="button secondary" id="set-dates">Dates</button>');document.querySelector('#set-dates').onclick=()=>datesDialog(task);document.querySelector('#download-draft').onclick=()=>downloadApproved(markdownFor(task,current),task.title||task.format,'md');if(current&&['pending','review_error'].includes(current.review_status)){document.querySelector('.workbench-controls').insertAdjacentHTML('afterbegin',`<button class="button secondary" id="review-latest">${current.review_status==='review_error'?'Retry Reviewer':'Run review'}</button>`);document.querySelector('#review-latest').onclick=()=>reviewLatest(task)}
+if(imageTask){const visual=document.querySelector('.visual-studio');visual.hidden=false;if(task.status==='human_approved')document.querySelector('.workbench-heading .status-chip').textContent='Copy approved'}else{document.querySelector('.visual-studio').remove()}navigationBack(document.querySelector('#back-task'),{page:'projects',projectId:task.project_id});document.querySelector('.workbench-controls').insertAdjacentHTML('afterbegin','<button class="button secondary" id="set-dates">Dates</button>');document.querySelector('#set-dates').onclick=()=>datesDialog(task);document.querySelector('#download-draft').onclick=()=>downloadApproved(markdownFor(task,current),task.title||task.format,'md');if(current&&['pending','review_error'].includes(current.review_status)){document.querySelector('.workbench-controls').insertAdjacentHTML('afterbegin',`<button class="button secondary" id="review-latest">${current.review_status==='review_error'?'Retry Reviewer':'Run review'}</button>`);document.querySelector('#review-latest').onclick=()=>reviewLatest(task)}
  document.querySelector('#generate-one')?.addEventListener('click',e=>generateSingle(task,e.currentTarget));document.querySelector('#retry-generate')?.addEventListener('click',e=>generateSingle(task,e.currentTarget));document.querySelector('#remediate')?.addEventListener('click',e=>remediate(task,e.currentTarget));document.querySelector('#generate-visual')?.addEventListener('click',e=>generateVisual(task,e.currentTarget));
  document.querySelector('#edit-toggle')?.addEventListener('click',()=>{document.querySelector('#draft-display').classList.add('hidden');document.querySelector('#edit-form').classList.remove('hidden')});document.querySelector('#cancel-edit')?.addEventListener('click',()=>workbenchPage(task.id));document.querySelector('#edit-form')?.addEventListener('submit',saveEdit);document.querySelector('#human-approve')?.addEventListener('click',()=>humanDecision('approve',task));document.querySelector('#human-reject')?.addEventListener('click',()=>humanDecision('reject',task));document.querySelector('#request-revision')?.addEventListener('click',()=>requestHumanRevision(task,document.querySelector('#request-revision')));document.querySelector('#export-draft')?.addEventListener('click',()=>copyApproved(markdownFor(task,current)));
+ if(imageTask)await loadTaskImages(task);
 }
 async function loadTaskImages(task,selectedId=null){
  const request=state.visualLoadRequest=(state.visualLoadRequest||0)+1;
@@ -616,9 +633,7 @@ async function loadTaskImages(task,selectedId=null){
   for(const id of ['visual-preview','visual-history','visual-workflow']){const element=document.getElementById(id);if(element)results.append(element)}
   const prompt=document.querySelector('#image-prompt');
   if(prompt&&!prompt.value){prompt.value=out.default_prompt;document.querySelector('#image-ratio').value=out.default_ratio||'square'}
-  document.querySelector('#visual-channel-help')?.remove();
-  document.querySelector('.visual-note')?.remove();
-  let mode=document.querySelector('#visual-mode');if(!mode){const label=document.createElement('label');label.className='visual-mode-field';label.textContent='Image mode';mode=document.createElement('select');mode.id='visual-mode';mode.add(new Option('Compose selected photo + Writer copy','original'));mode.add(new Option('Image to image - restyle a photo','img2img'));mode.add(new Option('Edit background - protect the product','edit'));mode.add(new Option('Text to image - new concept','concept'));mode.value=(out.project_assets||[]).length?'original':'concept';label.append(mode);document.querySelector('.visual-copy>label[for="image-prompt"]').before(label);mode.onchange=()=>{document.querySelector('#generate-visual').textContent=mode.value==='original'?'Create image post':mode.value==='edit'?'Edit background':mode.value==='img2img'?'Restyle selected photo':'Generate new concept';document.querySelector('#image-prompt').hidden=mode.value==='original';document.querySelector('.visual-copy>label[for="image-prompt"]').hidden=mode.value==='original';const photoControls=document.querySelector('#original-image-controls');if(photoControls)photoControls.hidden=mode.value==='concept';const sourceSelect=document.querySelector('#original-image-select');sourceSelect?.setAttribute('aria-required',mode.value==='concept'?'false':'true');const protection=document.querySelector('#photo-protection');if(protection)protection.hidden=mode.value!=='edit'||!assets.length;const ratio=document.querySelector('#image-ratio');ratio.disabled=mode.value==='edit'||mode.value==='img2img';if(state.visualData?.taskId===task.id)renderTaskImages(state.visualData.images,state.visualData.compositions)}}
+  let mode=document.querySelector('#visual-mode');if(!mode){const label=document.createElement('label');label.className='visual-mode-field';label.textContent='Image mode';mode=document.createElement('select');mode.id='visual-mode';mode.add(new Option('Compose selected photo + Writer copy','original'));mode.add(new Option('Image to image - restyle a photo','img2img'));mode.add(new Option('Edit background - protect the product','edit'));mode.add(new Option('Text to image - new concept','concept'));mode.value=(out.project_assets||[]).length?'original':'concept';label.append(mode);document.querySelector('.visual-direction-details').before(label);mode.onchange=()=>{document.querySelector('#generate-visual').textContent=mode.value==='original'?'Create image post':mode.value==='edit'?'Edit background':mode.value==='img2img'?'Restyle selected photo':'Generate new concept';document.querySelector('.visual-direction-details').hidden=mode.value==='original';const photoControls=document.querySelector('#original-image-controls');if(photoControls)photoControls.hidden=mode.value==='concept';const sourceSelect=document.querySelector('#original-image-select');sourceSelect?.setAttribute('aria-required',mode.value==='concept'?'false':'true');const protection=document.querySelector('#photo-protection');if(protection)protection.hidden=mode.value!=='edit'||!assets.length;const ratio=document.querySelector('#image-ratio');ratio.disabled=mode.value==='edit'||mode.value==='img2img';if(state.visualData?.taskId===task.id)renderTaskImages(state.visualData.images,state.visualData.compositions)}}
   const priorAsset=document.querySelector('#original-image-select')?.value;
   const assets=out.project_assets||[];let original=document.querySelector('#original-image-controls');if(!original){original=document.createElement('div');original.id='original-image-controls';original.className='original-image-controls';document.querySelector('.visual-actions').before(original)}original.replaceChildren();{
    const label=document.createElement('label');label.textContent='Original project photo';const select=document.createElement('select');select.id='original-image-select';select.add(new Option(assets.length?'Choose a project photo':'No project photos available',''));for(const asset of assets)select.add(new Option(asset.name,asset.id));select.disabled=!assets.length;if(assets.some(asset=>asset.id===priorAsset))select.value=priorAsset;else if(out.recommended_asset_id)select.value=out.recommended_asset_id;label.append(select);const sourceHelp=document.createElement('small');sourceHelp.className='source-photo-help';sourceHelp.textContent='No project photos are available. Add a photo to this project first.';sourceHelp.hidden=assets.length>0;
@@ -680,11 +695,25 @@ function openVisualLightbox(src,alt){
 }
 function visualApprovalLabel(status,hasComposition=true){
  if(!hasComposition)return 'Draft · visual not prepared';
- return ({needs_review:'Draft · review required',pending_copy_approval:'Pending human copy approval',pending_visual_review:'Raya visual review required',visual_changes_needed:'Visual changes needed',pending_visual_approval:'Pending human visual approval',human_approved:'Human approved · download available',stale:'Approval expired · content changed',visual_changed:'Approval revoked · visual changed'}[status]||'Draft · approval pending');
+ return ({needs_review:'Draft · review required',pending_copy_approval:'Pending human copy approval',pending_visual_review:'Raya visual review required',visual_changes_needed:'Visual changes needed',visual_limit_reached:'3 revisions used · download available',pending_visual_approval:'Pending human visual approval',human_approved:'Human approved · download available',stale:'Approval expired · content changed',visual_changed:'Approval revoked · visual changed'}[status]||'Draft · approval pending');
+}
+async function retryPendingVisualReview(task,composition,image,version,button){
+ setBusy(button,true,composition?'Reviewing image...':'Preparing review...');
+ try{
+  if(!composition){const layout=await api('/api/compose-visual',{method:'POST',body:JSON.stringify({image_id:image.id,version_id:version.id})});composition=layout.composition}
+  await api('/api/review-visual',{method:'POST',body:JSON.stringify({composition_id:composition.id})});
+  if(state.activeTask?.id===task.id)await loadTaskImages(task,image?.id||composition.image_id);
+  toast('Raya finished the visual review.');
+ }catch(failure){showVisualError(failure.message)}finally{setBusy(button,false)}
 }
 function renderTaskImages(images,compositions=[],selectedId=null,compositionId=null){
  const preview=document.querySelector('#visual-preview'),history=document.querySelector('#visual-history'),workflow=document.querySelector('#visual-workflow'),task=state.activeTask;
  if(!preview||!history||!workflow||!task)return;
+ const allImages=images,latestVersion=task.versions?.at(-1);
+ const visibleImageIds=new Set(compositions.filter(item=>item.visual_review).map(item=>item.image_id));
+ const waitingComposition=compositions.find(item=>item.version_id===latestVersion?.id&&!item.visual_review);
+ const waitingImage=allImages.find(item=>!compositions.some(composition=>composition.image_id===item.id));
+ images=allImages.filter(item=>visibleImageIds.has(item.id));
  const key='rekarasa:visual-selection:'+state.user?.id+':'+task.id;
  state.visualSelections=state.visualSelections||{};
  if(!state.visualSelections[key]){try{state.visualSelections[key]=JSON.parse(sessionStorage.getItem(key)||'null')}catch{}}
@@ -694,8 +723,16 @@ function renderTaskImages(images,compositions=[],selectedId=null,compositionId=n
  const draftEdit=previousDialog?.dataset.imageId===image?.id&&previousDialog?.dataset.taskId===task.id?previousDialog.querySelector('[name=message]')?.value||'':'';
  if(!image){
   if(previousDialog){state.visualEditDialog=null;previousDialog.close();previousDialog.remove()}
-  preview.innerHTML='<div class="visual-empty"><strong>No saved images yet.</strong><small>Choose a photo or generate an image.</small></div>';
-  workflow.replaceChildren();history.replaceChildren();state.visualEditImageId=null;return;
+  if(waitingComposition||waitingImage){
+   preview.innerHTML='<div class="visual-empty"><strong>Raya is checking the image.</strong><small>The image stays hidden until its visual review returns. You can retry the review below if it did not finish.</small></div>';
+   const pendingId=waitingComposition?.id||null;
+   workflow.innerHTML=`<section class="visual-review-card"><strong>${waitingComposition?'Visual review is pending':'Image saved; review setup is pending'}</strong><p>Raya checks the image against the brief before it appears in the preview.</p><button type="button" class="button secondary" id="retry-pending-visual">${waitingComposition?'Retry Raya review':'Prepare and review image'}</button></section>`;
+   workflow.querySelector('#retry-pending-visual')?.addEventListener('click',event=>retryPendingVisualReview(task,waitingComposition,waitingImage,latestVersion,event.currentTarget));
+  }else{
+   preview.innerHTML='<div class="visual-empty"><strong>No saved images yet.</strong><small>Choose a photo or generate an image.</small></div>';
+   workflow.replaceChildren();
+  }
+  history.replaceChildren();state.visualEditImageId=null;return;
  }
  const requestedComposition=compositionId||(!selectedId||selectedId===saved?.imageId?saved?.compositionId:null);
  const composition=compositions.find(item=>item.id===requestedComposition&&item.image_id===image.id)||compositions.find(item=>item.image_id===image.id);
@@ -705,25 +742,42 @@ function renderTaskImages(images,compositions=[],selectedId=null,compositionId=n
  state.visualSelectedImageId=image.id;state.visualSelectedCompositionId=composition?.id||null;
  try{sessionStorage.setItem(key,JSON.stringify(state.visualSelections[key]))}catch{}
  const current=task.versions?.at(-1),status=composition?.status;
-  const approved=status==='human_approved'&&!!composition?.download_url;
+ const approved=['human_approved','visual_limit_reached'].includes(status)&&!!composition?.download_url;
  const version=composition?task.versions?.find(item=>item.id===composition.version_id)?.version:null;
  const imageLabel=visualImageLabel(image,images,state.visualData?.editMessages||[]),approvalLabel=visualApprovalLabel(status,!!composition);
  preview.innerHTML=`<img src="${esc(composition?.preview_url||image.media_url)}" alt="${esc(imageLabel)} for ${esc(task.title||'this task')}"><div class="visual-meta"><span>${esc(imageLabel)} &middot; ${esc(image.size||'')}${version?' &middot; Copy v'+esc(version):''}</span><span class="visual-approval-state" data-status="${esc(status||'draft')}">${esc(approvalLabel)}</span></div>`;
   const previewImage=preview.querySelector('img');previewImage.onerror=()=>showVisualError('Image unavailable. Reopen this task.');previewImage.tabIndex=0;previewImage.setAttribute('role','button');previewImage.setAttribute('aria-label','Open enlarged image preview');previewImage.onclick=()=>openVisualLightbox(previewImage.src,previewImage.alt);previewImage.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openVisualLightbox(previewImage.src,previewImage.alt)}};
  const visualReview=composition?.visual_review;
  const reviewDetails=visualReview?`<div class="visual-review-result" data-verdict="${esc(visualReview.verdict)}"><strong>${esc(visualReview.verdict==='Pass'?'Raya visual review · PASS':'Raya visual review · Needs changes')}</strong><p>${esc(visualReview.summary||'')}</p>${visualReview.findings?.length?`<p><strong>Findings</strong></p><ul>${visualReview.findings.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`:''}${visualReview.next_steps?.length?`<p><strong>Suggested next steps</strong></p><ul>${visualReview.next_steps.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`:''}<small>${esc(visualReview.model||'Qwen vision')}</small></div>`:'';
- const needsVisualReview=composition&&!['stale','visual_changed'].includes(status);
- workflow.innerHTML=`${composition?`<section class="visual-review-card"><p>Raya checks the generated base image against the brief. The poster copy is overlaid separately. This sends the image and brief context to Groq's Qwen vision model.</p>${reviewDetails}${needsVisualReview?'<button type="button" class="button secondary" id="review-visual">Review image with Raya · Qwen</button>':''}</section>`:''}${status==='pending_visual_approval'?`${reviewDetails}<form id="visual-approval-form"><label class="visual-inspection"><input type="checkbox" name="inspected_image" required><span>I inspected the product and all displayed text.</span></label><button class="button primary" type="submit">Approve this visual</button></form>`:''}`;
+ const needsVisualReview=composition&&!visualReview&&!['stale','visual_changed'].includes(status);
+ const visualRevisionsUsed=composition?.visual_revision_count||0;
+ const canReviseVisual=composition&&visualReview?.verdict==='Needs changes'&&visualRevisionsUsed<3;
+ workflow.innerHTML=`${waitingComposition||waitingImage?`<section class="visual-review-card"><strong>A newer image is waiting for Raya’s review.</strong><p>It stays hidden until review finishes.</p><button type="button" class="button secondary" id="retry-pending-visual">${waitingComposition?'Retry Raya review':'Prepare and review image'}</button></section>`:''}${composition?`<section class="visual-review-card"><p>Raya checks the generated image against the brief before it is shown. The poster copy is overlaid separately.</p>${reviewDetails}${needsVisualReview?'<button type="button" class="button secondary" id="review-visual">Retry Raya review</button>':''}${canReviseVisual?`<label class="visual-revision-note" for="visual-revision-note">What should Reka change? (optional)<textarea id="visual-revision-note" rows="3" maxlength="500" placeholder="For example: move the cup lower and leave more open space for the headline.">${esc(composition.human_revision_note||'')}</textarea></label><button type="button" class="button primary" id="revise-visual">Reka: revise image using Raya’s notes (${visualRevisionsUsed}/3 used)</button>`:''}${status==='visual_limit_reached'?`<form id="visual-approval-form" class="visual-limit-approval"><p>${visualReview?.verdict==='Needs changes'?'Raya still recommends changes after three Reka revisions.':'The three image revisions are used.'} Download is available. Inspect the image and record your human decision here.</p><label class="visual-inspection"><input type="checkbox" name="inspected_image" required><span>I inspected the image and made the final human decision.</span></label><button class="button primary" type="submit">Approve visual as human</button></form>`:''}</section>`:''}${status==='pending_visual_approval'?`${reviewDetails}<form id="visual-approval-form"><label class="visual-inspection"><input type="checkbox" name="inspected_image" required><span>I inspected the product and all displayed text.</span></label><button class="button primary" type="submit">Approve this visual</button></form>`:''}`;
+ workflow.querySelector('#retry-pending-visual')?.addEventListener('click',event=>retryPendingVisualReview(task,waitingComposition,waitingImage,latestVersion,event.currentTarget));
  workflow.querySelector('#review-visual')?.addEventListener('click',async event=>{
   const button=event.currentTarget;setBusy(button,true,'Reviewing image...');
   try{await api('/api/review-visual',{method:'POST',body:JSON.stringify({composition_id:composition.id})});if(state.activeTask?.id===task.id)await loadTaskImages(state.activeTask,image.id);toast('Raya finished the visual review.')}catch(failure){showVisualError(failure.message)}finally{setBusy(button,false)}
+ });
+ workflow.querySelector('#revise-visual')?.addEventListener('click',async event=>{
+  const button=event.currentTarget,promptField=document.querySelector('#image-prompt'),modeField=document.querySelector('#visual-mode'),humanRevisionNote=document.querySelector('#visual-revision-note')?.value.trim()||'';
+  const priorPrompt=promptField?.value||'',priorMode=modeField?.value||'concept';
+  if(!promptField){showVisualError('The image direction field is unavailable. Reload this task and try again.');return}
+  setBusy(button,true,'Reka is reading Raya’s notes...');
+  try{
+   const direction=await api('/api/revise-image-direction',{method:'POST',body:JSON.stringify({composition_id:composition.id,human_revision_note:humanRevisionNote})});
+   promptField.value=direction.image_prompt;
+   if(modeField)modeField.value='concept';
+   setBusy(button,false);
+   await generateVisual(task,button,{visualRevisionOf:composition.id,humanRevisionNote});
+  }catch(failure){showVisualError(failure.message)}finally{promptField.value=priorPrompt;if(modeField){modeField.value=priorMode;modeField.onchange?.()}setBusy(button,false)}
  });
  workflow.querySelector('#compose-visual')?.addEventListener('click',event=>composeVisual(image.id,current.id,event.currentTarget));
  workflow.querySelector('#visual-approval-form')?.addEventListener('submit',async event=>{
   event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');
   if(button.disabled||!form.elements.inspected_image.checked)return;
   setBusy(button,true,'Saving approval...');
-  try{await api('/api/approve-visual',{method:'POST',body:JSON.stringify({composition_id:composition.id,inspected_image:true,note:'Human inspected the product depiction and all displayed text.'})});if(state.activeTask?.id===task.id)await loadTaskImages(state.activeTask);toast('Visual approved.')}catch(error){showVisualError(error.message)}finally{setBusy(button,false)}
+  const limitOverride=status==='visual_limit_reached';
+  try{await api('/api/approve-visual',{method:'POST',body:JSON.stringify({composition_id:composition.id,inspected_image:true,note:limitOverride?'Human inspected and accepted the visual after the three-revision limit.':'Human inspected the product depiction and all displayed text.'})});if(state.activeTask?.id===task.id)await loadTaskImages(state.activeTask);toast('Visual decision recorded.')}catch(error){showVisualError(error.message)}finally{setBusy(button,false)}
  });
  renderVisualHistory(images,compositions,image.id,composition?.id);
  if(keepDialog||state.visualEditImageId!==image.id||state.visualEditTaskId!==task.id)return;
@@ -738,15 +792,19 @@ function renderTaskImages(images,compositions=[],selectedId=null,compositionId=n
   if(!message||button.disabled)return;
   if(message.length>1000){error.textContent='Use 1,000 characters or fewer.';error.hidden=false;return}
   error.hidden=true;setBusy(button,true,'Editing image...');input.disabled=true;
-  try{
+   let savedEditedImageId=null;
+   try{
    const reference=await renderSelectedCompositionReference(composition);
    const result=await api('/api/edit-image-chat',{method:'POST',body:JSON.stringify({task_id:task.id,image_id:image.id,composition_id:composition?.id||null,message,...(reference||{})})});
    if(result.needs_clarification){const bubble=document.createElement('article');bubble.className='visual-edit-message';bubble.innerHTML=`<p><strong>You</strong>${esc(message)}</p><p><strong>Image editor</strong>${esc(result.reply)}</p>`;dialog.querySelector('.visual-edit-messages').append(bubble);return}
    if(!result.image?.id)throw new Error('The edit returned no saved image. Reopen this task.');
+    savedEditedImageId=result.image.id;
+    const layout=await api('/api/compose-visual',{method:'POST',body:JSON.stringify({image_id:savedEditedImageId,version_id:task.versions.at(-1).id})});
+    const review=await api('/api/review-visual',{method:'POST',body:JSON.stringify({composition_id:layout.composition.id})});
    if(state.visualEditDialog===dialog){state.visualEditImageId=null;state.visualEditTaskId=null;dialog.close()}
-   if(state.activeTask?.id===task.id)await loadTaskImages(state.activeTask,result.image.id);
-   toast('Edited version saved. Review before approval.');
-  }catch(failure){error.textContent=t(failure.code==='image_provider_unavailable'?'ComfyUI unavailable. Start it and retry.':failure.code==='image_model_missing'?'Select a ComfyUI model first.':failure.message);error.hidden=false;if(!dialog.isConnected)showVisualError(error.textContent)}finally{input.disabled=false;setBusy(button,false);if(dialog.open)input.focus()}
+    if(state.activeTask?.id===task.id)await loadTaskImages(state.activeTask,savedEditedImageId);
+    toast(review.review.verdict==='Pass'?'Raya reviewed the edited image.':'Raya found image changes to make. Reka can regenerate it from the review notes.');
+   }catch(failure){error.textContent=t(failure.code==='image_provider_unavailable'?'ComfyUI unavailable. Start it and retry.':failure.code==='image_model_missing'?'Select a ComfyUI model first.':failure.message);error.hidden=false;if(savedEditedImageId&&state.activeTask?.id===task.id)await loadTaskImages(state.activeTask,savedEditedImageId);if(!dialog.isConnected)showVisualError(error.textContent)}finally{input.disabled=false;setBusy(button,false);if(dialog.open)input.focus()}
  };
  dialog.showModal();dialog.querySelector('[name=message]').focus();
 }
@@ -756,14 +814,13 @@ function renderVisualHistory(images,compositions,selectedId,selectedCompositionI
  const entries=images.flatMap(image=>{const versions=compositions.filter(item=>item.image_id===image.id);return versions.length?versions.map(composition=>({image,composition})):[{image,composition:null}]});
  history.innerHTML=entries.map(({image,composition},index)=>{
   const selected=image.id===selectedId&&(composition?.id||null)===selectedCompositionId;
-  const approved=composition?.status==='human_approved'&&!!composition.download_url;
+  const approved=['human_approved','visual_limit_reached'].includes(composition?.status)&&!!composition.download_url;
   const version=state.activeTask?.versions?.find(item=>item.id===composition?.version_id)?.version;
   const label=visualImageLabel(image,images,edits)+(version?' / Copy v'+version:'');
   const approvalLabel=visualApprovalLabel(composition?.status,!!composition);
-  return `<article class="visual-thumb-card ${selected?'is-selected':''}" data-visual-entry="${index}"><button type="button" class="visual-thumb ${selected?'is-selected':''}" aria-pressed="${selected}" aria-label="Select ${esc(label)}" data-visual-image="${esc(image.id)}" data-visual-composition="${esc(composition?.id||'')}"><img src="${esc(composition?.preview_url||image.media_url)}" alt="${esc(label)}" loading="lazy"><span>${esc(label)}</span></button><small class="visual-thumb-status" data-status="${esc(composition?.status||'draft')}">${esc(approvalLabel)}</small><div class="visual-thumb-actions"><button type="button" class="text-button" data-visual-edit="${index}" aria-label="Edit ${esc(label)}">Edit</button><button type="button" class="text-button" data-visual-download="${index}" aria-label="Download ${esc(label)}" title="${approved?'Download approved visual':'Human approval is required before download'}" ${approved?'':'disabled'}>Download</button></div></article>`;
+  return `<article class="visual-thumb-card ${selected?'is-selected':''}" data-visual-entry="${index}"><button type="button" class="visual-thumb ${selected?'is-selected':''}" aria-pressed="${selected}" aria-label="Select ${esc(label)}" data-visual-image="${esc(image.id)}" data-visual-composition="${esc(composition?.id||'')}"><img src="${esc(composition?.preview_url||image.media_url)}" alt="${esc(label)}" loading="lazy"><span>${esc(label)}</span></button><small class="visual-thumb-status" data-status="${esc(composition?.status||'draft')}">${esc(approvalLabel)}</small><div class="visual-thumb-actions"><button type="button" class="text-button" data-visual-download="${index}" aria-label="Download ${esc(label)}" title="${composition?.status==='visual_limit_reached'?'Available after three image revisions':approved?'Download visual':'Human approval is required before download'}" ${approved?'':'disabled'}>Download</button></div></article>`;
  }).join('');
  history.querySelectorAll('[data-visual-image]').forEach(button=>button.onclick=()=>{state.visualEditImageId=null;state.visualEditTaskId=null;renderTaskImages(images,compositions,button.dataset.visualImage,button.dataset.visualComposition||null)});
- history.querySelectorAll('[data-visual-edit]').forEach(button=>button.onclick=()=>{const {image,composition}=entries[Number(button.dataset.visualEdit)];state.visualEditImageId=image.id;state.visualEditTaskId=state.activeTask.id;renderTaskImages(images,compositions,image.id,composition?.id)});
  history.querySelectorAll('[data-visual-download]').forEach(button=>button.onclick=()=>{const {image,composition}=entries[Number(button.dataset.visualDownload)];if(button.disabled)return;state.visualEditImageId=null;state.visualEditTaskId=null;renderTaskImages(images,compositions,image.id,composition?.id);downloadVisual(composition,'png',null)});
  history.querySelectorAll('img').forEach(image=>image.onerror=()=>{image.alt='Saved image unavailable'});
 }
@@ -793,11 +850,12 @@ async function composeVisual(imageId,versionId,button){
  const error=document.querySelector('#visual-error');if(error)error.hidden=true;setBusy(button,true,'Updating layout...');
  try{
   const result=await api('/api/compose-visual',{method:'POST',body:JSON.stringify({image_id:imageId,version_id:versionId})});
+  const review=await api('/api/review-visual',{method:'POST',body:JSON.stringify({composition_id:result.composition.id})});
   if(state.activeTask?.id===task.id){const key='rekarasa:visual-selection:'+state.user?.id+':'+task.id;if(state.visualSelections?.[key]?.imageId===imageId)state.visualSelections[key]={imageId,compositionId:result.composition.id};await loadTaskImages(state.activeTask)}
-  toast('Layout updated. Review before approval.');return true;
+  toast(review.review.verdict==='Pass'?'Raya reviewed the image. Inspect it before approval.':'Raya found image changes to make. Reka can regenerate it from the review notes.');return true;
  }catch(failure){showVisualError(failure.message);return false}finally{setBusy(button,false)}
 }
-async function generateVisual(task,button){
+async function generateVisual(task,button,visualRevision=null){
  if(button?.disabled)return;
  const prompt=document.querySelector('#image-prompt').value.trim(),ratio=document.querySelector('#image-ratio').value,error=document.querySelector('#visual-error');
  const mode=document.querySelector('#visual-mode')?.value||'concept',reference=state.photoProtection,assetId=document.querySelector('#original-image-select')?.value;
@@ -809,20 +867,21 @@ async function generateVisual(task,button){
  const preview=document.querySelector('#visual-preview'),selectionBefore=state.visualSelectedImageId;
  setBusy(button,true,'Creating image...');preview?.classList.add('is-loading');preview?.setAttribute('aria-busy','true');let savedImageId=null;
  try{
-  const out=await api('/api/generate-image',{method:'POST',body:JSON.stringify({task_id:task.id,prompt:prompt||task.title||'Compose the selected project photo with the current copy.',ratio,mode,provider:'comfyui',...(mode==='edit'?{asset_id:reference.assetId,mask:reference.mask}:mode==='img2img'||mode==='original'?{asset_id:assetId,...(mode==='original'?{strength:0.1}:{strength:Number(document.querySelector('#image-change-strength').value)})}:{})})});
+  const out=await api('/api/generate-image',{method:'POST',body:JSON.stringify({task_id:task.id,prompt:prompt||task.title||'Compose the selected project photo with the current copy.',ratio,mode,provider:'comfyui',...(visualRevision?{visual_revision_of:visualRevision.visualRevisionOf,human_revision_note:visualRevision.humanRevisionNote}:{}),...(mode==='edit'?{asset_id:reference.assetId,mask:reference.mask}:mode==='img2img'||mode==='original'?{asset_id:assetId,...(mode==='original'?{strength:0.1}:{strength:Number(document.querySelector('#image-change-strength').value)})}:{})})});
   savedImageId=out.image.id;
   const current=task.versions.at(-1);
   const layout=await api('/api/compose-visual',{method:'POST',body:JSON.stringify({image_id:savedImageId,version_id:current.id})});
   if(state.activeTask?.id===task.id&&state.visualSelectedImageId===selectionBefore){const key='rekarasa:visual-selection:'+state.user?.id+':'+task.id;state.visualSelections=state.visualSelections||{};state.visualSelections[key]={imageId:savedImageId,compositionId:layout.composition.id}}
-  toast('Image saved. Review before approval.');
- }catch(failure){const message=failure.code==='image_provider_unavailable'?'Image service unavailable. Start it and retry.':failure.code==='image_model_missing'?'Select a ComfyUI model first.':failure.message;showVisualError((savedImageId?'Image saved; layout failed. ':'')+message)}
+  const review=await api('/api/review-visual',{method:'POST',body:JSON.stringify({composition_id:layout.composition.id})});
+  toast(review.review.verdict==='Pass'?'Raya reviewed the image. Inspect it before approval.':'Raya found image changes to make. Reka can regenerate it from the review notes.');
+ }catch(failure){const message=failure.code==='image_provider_unavailable'?'Image service unavailable. Start it and retry.':failure.code==='image_model_missing'?'Select a ComfyUI model first.':failure.message;showVisualError((savedImageId?'Image saved; Raya’s review or layout did not finish. The image remains hidden until review succeeds. ':'')+message)}
  finally{
   if(state.activeTask?.id===task.id){await loadTaskImages(state.activeTask,state.visualSelectedImageId===selectionBefore?savedImageId:null);document.querySelector('#visual-preview')?.classList.remove('is-loading');document.querySelector('#visual-preview')?.setAttribute('aria-busy','false')}
   setBusy(button,false);
  }
 }
 async function downloadVisual(composition,type,button){
- if(!composition||composition.status!=='human_approved'||!composition.download_url){showVisualError('Approve this visual first.');return}
+ if(!composition||!['human_approved','visual_limit_reached'].includes(composition.status)||!composition.download_url){showVisualError('Approve this visual first or reach the three-revision limit.');return}
  if(!['png','svg'].includes(type))return;
  const taskId=state.activeTask?.id;
  if(composition.task_id&&composition.task_id!==taskId){showVisualError('Reopen the selected image.');return}
@@ -849,7 +908,7 @@ async function requestHumanRevision(task,button){const note=prompt('What should 
 async function saveEdit(e){e.preventDefault();const form=e.currentTarget,text=form.elements.content.value,taskId=state.selectedTask,baseContent=form.dataset.baseContent||'',baseVersionId=form.dataset.baseVersionId;let versionSaved=false;if(contentChangeKey(text)===contentChangeKey(baseContent)){toast('No content changed. No new version was saved.');return}try{const saved=await api('/api/edit',{method:'POST',body:JSON.stringify({task_id:taskId,base_version_id:baseVersionId,content:text})});versionSaved=true;const latest=saved.task.versions.at(-1);await openTask(taskId);await api('/api/review-edit',{method:'POST',body:JSON.stringify({task_id:taskId,version_id:latest.id})});toast('New version saved and sent for review.');await workbenchPage(taskId)}catch(err){if(versionSaved){try{await openTask(taskId);await workbenchPage(taskId)}catch{}}toast(err.message,true)}}
 async function reviewLatest(task){const button=document.querySelector('#review-latest'),version=task.versions?.at(-1);if(!version){toast('No saved version is available to review.',true);return}setBusy(button,true,'Reviewing…');try{await api('/api/review-edit',{method:'POST',body:JSON.stringify({task_id:task.id,version_id:version.id})});toast('Saved version reviewed.');await workbenchPage(task.id)}catch(e){toast(e.message,true);setBusy(button,false)}}
 function datesDialog(task){const overlay=document.createElement('div');overlay.className='modal-backdrop';overlay.innerHTML=`<form class="modal-card" id="dates-form"><button type="button" class="modal-close" aria-label="Close">×</button><div class="eyebrow">PLANNER DATES</div><h2>Put a date on the work.</h2><p>Production deadline and planned publication time are saved separately. A planned time does not schedule or publish content.</p><label>Production deadline<input name="deadline" type="date" value="${esc((task.deadline||'').slice(0,10))}"></label><label>Planned publication time<input name="publish_at" type="datetime-local" value="${esc(task.publish_at?new Date(task.publish_at).toISOString().slice(0,16):'')}"></label><div class="modal-actions"><button class="button secondary" type="button" id="clear-dates">Clear dates</button><button class="button primary" type="submit">Save dates</button></div></form>`;document.body.append(overlay);overlay.querySelector('.modal-close').onclick=()=>overlay.remove();overlay.onclick=e=>{if(e.target===overlay)overlay.remove()};overlay.querySelector('#clear-dates').onclick=async()=>{try{await api('/api/set-dates',{method:'POST',body:JSON.stringify({task_id:task.id,deadline:null,publish_at:null})});overlay.remove();await workbenchPage(task.id);toast('Planner dates cleared.')}catch(e){toast(e.message,true)}};overlay.querySelector('form').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.currentTarget));data.task_id=task.id;data.publish_at=data.publish_at?new Date(data.publish_at).toISOString():null;try{await api('/api/set-dates',{method:'POST',body:JSON.stringify(data)});overlay.remove();await workbenchPage(task.id);toast('Planner dates saved.')}catch(err){toast(err.message,true)}};}
-async function humanDecision(which,task){const note=which==='approve'?'Human approved after reviewing the latest version.':prompt('What should the Writer or reviewer address?','Please review the outstanding findings.');if(note===null)return;try{await api('/api/'+which,{method:'POST',body:JSON.stringify({task_id:task.id,note})});toast(which==='approve'?'Human approval recorded.':'Human decision recorded.');await workbenchPage(task.id)}catch(e){toast(e.message,true)}}
+async function humanDecision(which,task){const override=which==='approve'&&task.remediation_count>=3&&['escalated','needs_revision'].includes(task.status);if(override&&!confirm('Raya still flagged this version after three Reka revisions. Approving will record your human override. Continue?'))return;const note=which==='approve'?(override?'Human approved as an override after three Reka revisions despite Raya’s findings.':'Human approved after reviewing the latest version.'):prompt('What should the Writer or reviewer address?','Please review the outstanding findings.');if(note===null)return;try{await api('/api/'+which,{method:'POST',body:JSON.stringify({task_id:task.id,note})});toast(which==='approve'?'Human approval recorded.':'Human decision recorded.');await workbenchPage(task.id)}catch(e){toast(e.message,true)}}
 function markdownFor(task,version){if(!version||!version.content)return'';const meta=[`- Project: ${task.project_name||'Project'}`,`- Format: ${task.format}`,`- Platform: ${task.platform||'Not set'}`,`- Status: ${taskStatus(task)}`,`- Version: ${version.version}`,`- Approved: ${date(version.created_at)}`];return [`# ${task.title||task.format}`,'',...meta,'',String(version.content).trim(),''].join('\n')}
 async function copyApproved(text,message='Markdown copied to your clipboard.'){if(!text)return;try{await navigator.clipboard.writeText(text);toast(message)}catch{const area=document.createElement('textarea');area.value=text;document.body.append(area);area.select();let copied=false;try{copied=document.execCommand('copy')}finally{area.remove()}toast(copied?message:'Could not copy automatically. Select the content text and copy it manually.',!copied)}}
 function downloadApproved(text,title,ext){if(!text)return;const suffix=ext==='md'?'.md':'.txt';const blob=new Blob([text],{type:(ext==='md'?'text/markdown':'text/plain')+';charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=(String(title||'approved-content').replace(/[<>:"/\\|?*]+/g,'-').trim()||'approved-content')+suffix;document.body.append(link);link.click();link.remove();URL.revokeObjectURL(url);toast(ext==='md'?'Approved draft downloaded as Markdown.':'Approved text downloaded.')}
