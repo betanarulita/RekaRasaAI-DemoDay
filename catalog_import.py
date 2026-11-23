@@ -33,7 +33,7 @@ def xml(raw):
     return ET.fromstring(raw)
 
 
-def spreadsheet_rows(raw, name):
+def spreadsheet_rows(raw, name, columns=COLUMNS, document_label="catalog"):
     if name.lower().endswith(".csv"):
         return list(csv.reader(io.StringIO(raw.decode("utf-8-sig"))))
     if not name.lower().endswith(".xlsx"):
@@ -50,10 +50,10 @@ def spreadsheet_rows(raw, name):
             shared = ["".join(t.text or "" for t in e.findall(".//s:t", NS)) for e in xml(archive.read("xl/sharedStrings.xml")).findall("s:si", NS)]
         sheets = [n for n in names if n.startswith("xl/worksheets/sheet") and n.endswith(".xml")]
         if len(sheets) != 1:
-            raise ValueError("Use one worksheet per catalog file.")
+            raise ValueError(f"Use one worksheet per {document_label} file.")
         result = []
         for row in xml(archive.read(sheets[0])).findall("s:sheetData/s:row", NS):
-            values = [""] * len(COLUMNS)
+            values = [""] * len(columns)
             for cell in row.findall("s:c", NS):
                 if cell.find("s:f", NS) is not None:
                     raise ValueError("Replace formulas with plain values before importing.")
@@ -62,9 +62,10 @@ def spreadsheet_rows(raw, name):
                 index = 0
                 for c in letters.upper():
                     index = index * 26 + ord(c) - 64
-                if not 1 <= index <= len(COLUMNS):
+                if not 1 <= index <= len(columns):
                     if "".join(cell.itertext()).strip():
-                        raise ValueError("Only the seven template columns are supported.")
+                        limit_message = "Only the seven template columns are supported." if document_label == "catalog" else f"Only the {len(columns)} template columns are supported."
+                        raise ValueError(limit_message)
                     continue
                 value = cell.findtext("s:v", default="", namespaces=NS)
                 if cell.get("t") == "s":
@@ -75,6 +76,125 @@ def spreadsheet_rows(raw, name):
                 values[index - 1] = value
             result.append(values)
         return result
+
+
+MAX_ATTACHMENT_TEXT_CHARS = 120_000
+GENERIC_SPREADSHEET_COLUMNS = tuple(f"column_{index}" for index in range(50))
+DOCX_NS = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+
+
+def _bounded_text(text, label):
+    text = str(text or "").replace("\x00", "").strip()
+    if not text:
+        raise ValueError(f"No readable text was found in {label}.")
+    if len(text) > MAX_ATTACHMENT_TEXT_CHARS:
+        raise ValueError(f"Extracted text from {label} exceeds {MAX_ATTACHMENT_TEXT_CHARS:,} characters. Split the file into smaller parts.")
+    return text
+
+
+def spreadsheet_document_text(raw, name):
+    try:
+        rows = spreadsheet_rows(raw, name, GENERIC_SPREADSHEET_COLUMNS, "spreadsheet")
+    except (zipfile.BadZipFile, KeyError, IndexError, ET.ParseError, UnicodeError, RuntimeError, NotImplementedError, struct.error) as exc:
+        raise ValueError("Cannot read this spreadsheet. Use one valid worksheet and plain cell values.") from exc
+    if len(rows) > 2001 or any(len(row) > len(GENERIC_SPREADSHEET_COLUMNS) for row in rows):
+        raise ValueError("Spreadsheets support at most 2,000 data rows and 50 columns per file.")
+    header_index = next((index for index, row in enumerate(rows) if any(str(value).strip() for value in row)), None)
+    if header_index is None:
+        raise ValueError("This spreadsheet has no readable headers or values.")
+    headers = [str(value).strip()[:80] or f"Column {index + 1}" for index, value in enumerate(rows[header_index])]
+    lines = [f"Spreadsheet: {name}", "Each row preserves its original header-to-value relationship."]
+    for row_number, values in enumerate(rows[header_index + 1 :], header_index + 2):
+        entries = [f"{headers[index]}: {str(value).strip()}" for index, value in enumerate(values) if str(value).strip()]
+        if entries:
+            lines.append(f"Row {row_number}: " + " | ".join(entries))
+            if sum(len(line) + 1 for line in lines) > MAX_ATTACHMENT_TEXT_CHARS:
+                raise ValueError(f"Extracted text from {name} exceeds {MAX_ATTACHMENT_TEXT_CHARS:,} characters. Split the file into smaller parts.")
+    return _bounded_text("\n".join(lines), name)
+
+
+def _docx_text(raw, name):
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            entries = archive.infolist()
+            if len(entries) > 300 or sum(item.file_size for item in entries) > 30_000_000:
+                raise ValueError("This DOCX expands beyond the document import limit.")
+            names = archive.namelist()
+            if any("vbaproject" in item.lower() for item in names):
+                raise ValueError("Macro-enabled Word documents are not supported.")
+            document = xml(archive.read("word/document.xml"))
+    except ValueError:
+        raise
+    except (zipfile.BadZipFile, KeyError, IndexError, ET.ParseError, RuntimeError, NotImplementedError) as exc:
+        raise ValueError("Cannot read this DOCX. Use a valid Word document with plain text.") from exc
+
+    body = document.find("w:body", DOCX_NS)
+    if body is None:
+        raise ValueError("Cannot read this DOCX. The document body is missing.")
+    lines = [f"Word document: {name}"]
+    for child in body:
+        if child.tag.endswith("}p"):
+            text = "".join(node.text or "" for node in child.findall(".//w:t", DOCX_NS)).strip()
+            if text:
+                lines.append(text)
+        elif child.tag.endswith("}tbl"):
+            for row in child.findall("w:tr", DOCX_NS):
+                cells = []
+                for cell in row.findall("w:tc", DOCX_NS):
+                    text = " ".join("".join(node.text or "" for node in paragraph.findall(".//w:t", DOCX_NS)).strip() for paragraph in cell.findall(".//w:p", DOCX_NS)).strip()
+                    cells.append(text)
+                if any(cells):
+                    lines.append("Table row: " + " | ".join(cells))
+        if sum(len(line) + 1 for line in lines) > MAX_ATTACHMENT_TEXT_CHARS:
+            raise ValueError(f"Extracted text from {name} exceeds {MAX_ATTACHMENT_TEXT_CHARS:,} characters. Split the file into smaller parts.")
+    return _bounded_text("\n".join(lines), name)
+
+
+def _pdf_text(raw, name):
+    try:
+        import fitz
+    except ImportError as exc:
+        raise ValueError("PDF text extraction is unavailable in this installation. Install the configured PDF reader and retry.") from exc
+    try:
+        document = fitz.open(stream=raw, filetype="pdf")
+    except Exception as exc:
+        raise ValueError("Cannot read this PDF. Use a valid, unencrypted PDF.") from exc
+    try:
+        if document.needs_pass:
+            raise ValueError("Password-protected PDFs are not supported.")
+        if document.page_count > 200:
+            raise ValueError("PDFs support at most 200 pages per file.")
+        lines = [f"PDF document: {name}"]
+        for page_number, page in enumerate(document, 1):
+            text = page.get_text("text").strip()
+            if text:
+                lines.append(f"Page {page_number}:\n{text}")
+            if sum(len(line) + 1 for line in lines) > MAX_ATTACHMENT_TEXT_CHARS:
+                raise ValueError(f"Extracted text from {name} exceeds {MAX_ATTACHMENT_TEXT_CHARS:,} characters. Split the file into smaller parts.")
+        extracted = "\n\n".join(lines)
+        if len(lines) == 1:
+            raise ValueError("No selectable text was found in this PDF. Scanned pages need text extraction before upload.")
+        return _bounded_text(extracted, name)
+    finally:
+        document.close()
+
+
+def extract_attachment_text(raw, name):
+    """Extract supported document text while retaining basic source structure."""
+    extension = name.lower().rsplit(".", 1)[-1] if "." in name else ""
+    if extension in ("txt", "md", "markdown"):
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeError as exc:
+            raise ValueError("Text files must use UTF-8 encoding.") from exc
+        return _bounded_text(text, name)
+    if extension == "docx":
+        return _docx_text(raw, name)
+    if extension == "pdf":
+        return _pdf_text(raw, name)
+    if extension in ("xlsx", "csv"):
+        return spreadsheet_document_text(raw, name)
+    raise ValueError("Supported files: PDF, DOCX, XLSX, CSV, TXT, MD, PNG, and JPG.")
 
 
 def parse_catalog(raw, name):

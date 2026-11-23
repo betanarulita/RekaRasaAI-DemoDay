@@ -17,6 +17,7 @@ os.environ.update({key: "" for key in (
     "GROQ_API_KEY", "OPENAI_API_KEY", "POLLINATIONS_TOKEN",
     "AGNES_API_KEY", "CLOUDFLARE_IMAGE_API_KEY", "CLOUDFLARE_IMAGE_URL",
 )})
+os.environ.update({"COMFYUI_URL": "http://127.0.0.1:1", "COMFYUI_CHECKPOINT": ""})
 os.environ["CERTIFICATE_REGISTRY_MODE"] = "manual"
 os.environ["LOG_LEVEL"] = "CRITICAL"
 

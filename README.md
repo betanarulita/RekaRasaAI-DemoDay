@@ -116,6 +116,7 @@ It is an adapter, not an authority. The CLI is a thin HTTP client with no rules 
 - A plan must be confirmed before tasks can generate drafts. Each revision creates a new immutable version; history is never overwritten.
 - A maximum of three remediation attempts per task, then human escalation. Human approval requires a passing review of the latest version.
 - Content Studio supports the configured image provider (ComfyUI by default, optional Cloudflare text concepts), versioned text composition, explicit visual approval, and SVG/browser PNG export.
+- Optional image review sends a composed poster's text-free ComfyUI base image and brief context to Groq's vision-capable Qwen model; a passing Raya visual review is required before a new visual can be human-approved. Set `VISUAL_REVIEW_MODEL` to an enabled Groq vision model if you want to change it.
 - Planner list and calendar views; production deadlines and planned publication times are separate fields. No publishing integration is configured and the app never reports a publication.
 - Plain text and Markdown upload, capped at 250 KB. PDF extraction is not implemented.
 - A data disclosure at `GET /api/privacy` and in Settings that names which fields reach the text and image providers, which never do, what is retained, and what is still missing. It is an honest disclosure, not a privacy policy.
@@ -161,8 +162,8 @@ layout.
 | `HOST` | Bind address | `127.0.0.1` |
 | `PORT` | HTTP port | `8000` |
 | `DATABASE_PATH` | SQLite path; use persistent mounted storage when hosted | `./data/rekarasa.sqlite3` |
-| `LLM_PROVIDER` | Provider selector (currently Groq) | `groq` |
 | `GROQ_API_KEY` | Server-only Groq API credential | unset; agent calls fail clearly |
+| `VISUAL_REVIEW_MODEL` | Groq vision model used when a person requests Raya image review | `qwen/qwen3.8-27b` |
 | `MODEL` | Groq text model ID | `openai/gpt-oss-20b` |
 | `IMAGE_PROVIDER` | Default engine; optional Cloudflare requires explicit selection | `comfyui` |
 | `COMFYUI_URL` | Local ComfyUI server base URL | `http://127.0.0.1:8188` |

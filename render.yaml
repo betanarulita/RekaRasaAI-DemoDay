@@ -17,8 +17,6 @@ services:
         value: /var/data/rekarasa.sqlite3
       - key: GROQ_API_KEY
         sync: false
-      - key: LLM_PROVIDER
-        value: groq
       - key: MODEL
         value: openai/gpt-oss-20b
       - key: IMAGE_PROVIDER

@@ -26,7 +26,7 @@ GET /system_stats and /object_info responded. Required ImageScale, MaskToImage, 
 
 ## Verification limits
 
-The selected-image edit flow was verified with one real local ComfyUI job on 6 November 2026 using the installed `v1-5-pruned-emaonly.safetensors` checkpoint and an NVIDIA GeForce RTX 4050 Laptop GPU. The request supplied the selected composition raster and reached ComfyUI as an image-to-image reference; a new PNG and unapproved composition were persisted while the source image remained intact. The text planner was stubbed only in this harness to avoid external text-provider calls. Final visual quality still requires human inspection, and durable worker recovery remains separate engineering work.
+The selected-image edit flow was verified with one real local ComfyUI job on 6 November 2026 using the installed `v1-5-pruned-emaonly.safetensors` checkpoint and an RTX 4050 Laptop GPU. The request supplied the selected composition raster and reached ComfyUI as an image-to-image reference; a new PNG and unapproved composition were persisted while the source image remained intact. The text planner was stubbed only in this harness to avoid external text-provider calls. Final visual quality still requires human inspection, and durable worker recovery remains separate engineering work.
 
 ---
 
@@ -75,4 +75,4 @@ No Agnes requests or generation jobs were submitted during setup. Syntax checks 
 
 ## Local startup result
 
-ComfyUI was started as a hidden local process and GET /system_stats succeeded. It reports an NVIDIA GeForce RTX 4050 Laptop GPU with about 6 GiB VRAM. This confirms the server is reachable, not that a generation job has passed. Restart RekaRasa to load its updated provider module and configuration. Historical provider images remain accessible through history, but are not chosen as the default concept preview.
+ComfyUI was started as a hidden local process and GET /system_stats succeeded. It reports an RTX 4050 Laptop GPU with about 6 GiB VRAM. This confirms the server is reachable, not that a generation job has passed. Restart RekaRasa to load its updated provider module and configuration. Historical provider images remain accessible through history, but are not chosen as the default concept preview.

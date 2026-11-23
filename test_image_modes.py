@@ -37,6 +37,9 @@ class ReferenceWorkflowTests(unittest.TestCase):
         self.assertEqual((graph['15']['inputs']['width'], graph['15']['inputs']['height']), (1200, 1600))
         self.assertNotIn('10', graph)
 
+    def test_compose_uses_minimum_supported_reference_strength(self):
+        self.assertEqual(image_options('original'), (0.1, None))
+
     def test_protected_pixels_bypass_generated_output_at_original_resolution(self):
         graph = build_workflow('sd15', 'Background', '1200x1600', '', 7,
                                reference_name='source.png', mask_name='mask.png', strength=0.75)
@@ -171,6 +174,28 @@ class ImageModeIntegrationTests(unittest.TestCase):
         self.assertEqual(code, 400, body)
         remote.assert_not_called()
 
+    def test_compose_requires_photo_then_processes_the_reference_with_comfyui(self):
+        task_id, version_id = self.task(self.owner, self.project_id)
+        asset_id, raw = self.source()
+        result = fixture_png(16, bytes((0xC0, 0x80, 0x40)))
+        with patch.object(app, 'call_comfyui_provider', return_value=(result, 'image/png')) as local, patch.object(app, 'call_image_provider') as other:
+            missing_status, _, missing_body = self.generate(task_id, mode='original')
+            self.assertEqual(missing_status, 400, missing_body)
+            self.assertIn('Choose an original photo', missing_body['error'])
+            local.assert_not_called()
+            code, _, body = self.generate(task_id, mode='original', asset_id=asset_id)
+        self.assertEqual(code, 201, body)
+        self.assertEqual(body['image']['provider'], 'comfyui')
+        self.assertEqual(body['image']['mode'], 'original')
+        self.assertEqual(body['image']['source_asset_id'], asset_id)
+        self.assertEqual(local.call_args.kwargs['reference'], raw)
+        self.assertIsNone(local.call_args.kwargs['mask'])
+        self.assertEqual(local.call_args.kwargs['strength'], 0.1)
+        self.assertEqual(local.call_args.kwargs['seed'], body['image']['seed'])
+        self.assertIn('Preserve the selected photo', local.call_args.args[0])
+        self.assertEqual(version_id, body['image']['copy_version_id'])
+        other.assert_not_called()
+
     def test_protected_edit_requires_mask_and_img2img_requires_photo(self):
         task_id, _ = self.task(self.owner, self.project_id)
         asset_id, _ = self.source()
@@ -178,6 +203,43 @@ class ImageModeIntegrationTests(unittest.TestCase):
             self.assertEqual(self.generate(task_id, mode='edit', asset_id=asset_id)[0], 400)
             self.assertEqual(self.generate(task_id, mode='img2img')[0], 400)
         local.assert_not_called()
+
+    def test_text_to_image_uses_comfyui_without_source_and_appears_in_results(self):
+        task_id, version_id = self.task(self.owner, self.project_id, status='approved_pending_human', review='Pass')
+        with closing(app.connect()) as db, db:
+            db.execute('INSERT INTO sources VALUES(?,?,?,?,?,?)',
+                       (app.uid(), self.project_id, 'product-facts.md', 'text/markdown', 'Cedar soap, unscented, 90 g.', app.now()))
+            self.assertEqual(db.execute('SELECT count(*) FROM project_assets WHERE project_id=?', (self.project_id,)).fetchone()[0], 0)
+        result = fixture_png(64)
+        with patch.object(app, 'call_comfyui_provider', return_value=(result, 'image/png')) as local, patch.object(app, 'call_image_provider') as other:
+            code, _, body = self.generate(task_id, mode='concept', ratio='portrait')
+        self.assertEqual(code, 201, body)
+        self.assertEqual(body['image']['provider'], 'comfyui')
+        self.assertEqual(body['image']['mode'], 'concept')
+        self.assertEqual(body['image']['size'], '1024x1280')
+        self.assertEqual(local.call_args.args[1], '1024x1280')
+        self.assertNotIn('reference', local.call_args.kwargs)
+        self.assertNotIn('mask', local.call_args.kwargs)
+        self.assertIn('Cedar soap, unscented, 90 g.', local.call_args.args[0])
+        other.assert_not_called()
+        self.assertTrue((app.IMAGE_STORAGE_PATH / (body['image']['id'] + '.png')).is_file())
+        code, _, composition = self.request('/api/compose-visual', 'POST',
+                                             {'image_id': body['image']['id'], 'version_id': version_id},
+                                             self.cookie, self.csrf)
+        self.assertEqual(code, 201, composition)
+        code, _, listed = self.request('/api/images?task_id=' + task_id, cookie=self.cookie)
+        self.assertEqual(code, 200, listed)
+        self.assertIn(body['image']['id'], {image['id'] for image in listed['images']})
+        self.assertIn(composition['composition']['id'], {item['id'] for item in listed['compositions']})
+
+    def test_text_to_image_does_not_allow_a_remote_image_provider(self):
+        task_id, _ = self.task(self.owner, self.project_id)
+        with patch.object(app, 'call_comfyui_provider') as local, patch.object(app, 'call_image_provider') as remote:
+            code, _, body = self.generate(task_id, mode='concept', provider='cloudflare')
+        self.assertEqual(code, 400, body)
+        self.assertEqual(body['code'], 'invalid_image_provider')
+        local.assert_not_called()
+        remote.assert_not_called()
 
     def test_archived_photo_during_inference_cannot_save_a_result(self):
         task_id, _ = self.task(self.owner, self.project_id)

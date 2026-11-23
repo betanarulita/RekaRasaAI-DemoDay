@@ -8,12 +8,12 @@ from xml.sax.saxutils import escape
 
 
 CHANNELS = {
-    "Instagram": {"ratio": "portrait", "direction": "For an image post, lead with a clear visual idea and keep the caption separate. For Reels, write scenes and voiceover; never claim to render video."},
-    "TikTok": {"ratio": "story", "direction": "Choose a photo post, cover, or short-video script to fit the brief. A photo post needs concise on-image copy and a separate caption; a video needs a hook, scenes, and voiceover."},
-    "Facebook": {"ratio": "square", "direction": "Use an accessible image-led post with a conversational caption and one clear action when an image is requested."},
-    "Threads": {"ratio": "portrait", "direction": "Prefer a conversational text post or a short thread; add an image card only when requested or useful. Avoid treating it as an Instagram caption."},
-    "X": {"ratio": "landscape", "direction": "Use a concise standalone post or clearly numbered thread. For image-led content, keep the on-image message and post copy separate."},
-    "Marketplace": {"ratio": "square", "direction": "Keep titles and listing details factual and scannable. Use a separate product image or image card when requested. Never invent price, discount, stock, or certification."},
+    "Instagram": {"ratio": "portrait", "direction": "Write for a visual feed but do not invent an image deliverable. Let the caption support the Planner's angle with a specific opening and a natural rhythm; keep it concise when the idea is simple. If an image or carousel is requested, make the copy work with the visual and keep slide text distinct from the caption."},
+    "TikTok": {"ratio": "story", "direction": "For a video script, write a shootable sequence with visual action, spoken or on-screen lines, and pacing that differs from a caption. Open with an image, action, useful detail, or line that fits the idea, not a default question. Use conversational language; a CTA is optional. For a requested photo post, separate on-image copy from caption."},
+    "Facebook": {"ratio": "square", "direction": "Use a conversational post suited to sharing context or inviting a real response. Keep the ask proportionate to the goal; do not append a sales CTA by default. Pair with an image only when the format requests it."},
+    "Threads": {"ratio": "portrait", "direction": "Write like a concise conversational thought or a short, connected thread. Make one clear point and leave room for a genuine reply when engagement is the goal. Do not reuse an Instagram caption structure or add an image unless requested."},
+    "X": {"ratio": "landscape", "direction": "Write a direct standalone thought or a coherent numbered thread when the idea needs room. Prefer a concrete observation over a promotional opener. Keep image copy separate when an image is requested."},
+    "Marketplace": {"ratio": "square", "direction": "Use a clear product title and scannable factual listing language. Include only sourced attributes. Never invent price, discount, stock, shipping, or certification; omit missing details."},
 }
 CHANNEL_ALIASES = {"ig": "Instagram", "fb": "Facebook", "twitter": "X", "x/twitter": "X", "shopee": "Marketplace", "tokopedia": "Marketplace"}
 
@@ -31,11 +31,12 @@ def channel_guidance(platform: str) -> str:
 PLANNER_CHANNEL_INSTRUCTIONS = (
     " When the user requests caption only, use format Caption only and produce only accompanying post text, not an image task or script. "
     " Channel preferences are optional and separate from output formats. If supplied, create at least one task "
-    "for each requested channel with that exact channel name in platform. Within one to six tasks, choose the "
-    "deliverable for each channel from the brief: image post, photo post, static ad, product hero, video cover, "
-    "video script, listing, or text post. An image request must produce an image-oriented task, not only a script. "
-    "Do not force TikTok to mean video: a photo post or cover is also possible. Split a campaign bundle into "
-    "channel-specific tasks when multiple channels are requested. Do not claim media was generated or published. "
+    "for each requested channel with that exact channel name in platform. In normal chat, choose text-first "
+    "deliverables unless the brief explicitly requests an image/gambar, photo/foto, poster, visual, or other image output; "
+    "never choose an image solely because a channel is visual. For an explicit image request, choose an image-oriented "
+    "task such as image post, photo post, static ad, product hero, or video cover, not only a script. "
+    "Adapt text structure to each channel and do not force TikTok to mean video. "
+    "Split a campaign bundle into channel-specific tasks when multiple channels are requested. Do not claim media was generated or published. "
     "Channel directions are editorial suggestions, not platform policy or guaranteed performance. "
     "Tone describes brand voice, not the publishing destination. The task platform and output format "
     "determine structure; apply the brand voice within them. A concise tone does not turn an Instagram "

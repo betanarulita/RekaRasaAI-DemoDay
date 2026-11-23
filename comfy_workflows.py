@@ -4,10 +4,10 @@ import math
 
 
 def image_options(mode, strength=None, seed=None):
-    if mode not in ("concept", "img2img", "edit"):
-        raise ValueError("Choose text-to-image, image-to-image, or protected background editing.")
+    if mode not in ("concept", "original", "img2img", "edit"):
+        raise ValueError("Choose Compose selected photo, text-to-image, image-to-image, or protected background editing.")
     if strength is None:
-        strength = 0.75 if mode == "edit" else 0.35
+        strength = 0.75 if mode == "edit" else 0.1 if mode == "original" else 0.35
     if isinstance(strength, bool) or not isinstance(strength, (int, float)) or not math.isfinite(strength) or not 0.1 <= strength <= 0.85:
         raise ValueError("Image change strength must be between 0.1 and 0.85.")
     if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2**32):
@@ -25,7 +25,10 @@ def build_workflow(checkpoint, prompt, size, negative_prompt, seed, reference_na
     strength, seed = image_options(mode, strength, seed)
     if seed is None:
         raise ValueError("Resolve the generation seed before building the workflow.")
-    scale = min(1, 512 / max(width, height))
+    # The installed default is SD 1.5. Render modestly above its 512px
+    # training size, then resize to the requested canvas; this improves detail
+    # without jumping to the VRAM cost of SDXL-sized latents.
+    scale = min(1, 640 / max(width, height))
     work_width = max(64, int(width * scale) // 8 * 8)
     work_height = max(64, int(height * scale) // 8 * 8)
     graph = {
@@ -33,8 +36,8 @@ def build_workflow(checkpoint, prompt, size, negative_prompt, seed, reference_na
         "2": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["1", 1]}},
         "3": {"class_type": "CLIPTextEncode", "inputs": {"text": negative_prompt, "clip": ["1", 1]}},
         "4": {"class_type": "EmptyLatentImage", "inputs": {"width": work_width, "height": work_height, "batch_size": 1}},
-        "5": {"class_type": "KSampler", "inputs": {"seed": seed, "steps": 25, "cfg": 7.0,
-              "sampler_name": "euler", "scheduler": "normal", "denoise": strength if reference_name else 1.0,
+        "5": {"class_type": "KSampler", "inputs": {"seed": seed, "steps": 28, "cfg": 6.5,
+              "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": strength if reference_name else 1.0,
               "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0]}},
         "6": {"class_type": "VAEDecode", "inputs": {"samples": ["5", 0], "vae": ["1", 2]}},
         "15": {"class_type": "ImageScale", "inputs": {"image": ["6", 0], "upscale_method": "lanczos", "width": width, "height": height, "crop": "disabled"}},

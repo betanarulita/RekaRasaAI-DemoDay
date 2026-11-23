@@ -22,6 +22,25 @@ CURE_DRAFT = (
 )
 
 
+def content_quality_findings():
+    return [{
+        "criterion": "Content quality: " + criterion,
+        "result": "Pass",
+        "claim": "",
+        "rule_id": None,
+        "evidence_source_id": None,
+        "explanation": "Severity: LOW. The draft meets this assessment against the supplied context.",
+        "recommendation": "No change required.",
+    } for criterion in app.CONTENT_QUALITY_CRITERIA]
+
+
+def reviewer_v2_output():
+    assessments = {}
+    for finding in content_quality_findings():
+        assessments[finding["criterion"]] = {key: finding[key] for key in ("result", "claim", "evidence_source_id", "explanation", "recommendation")}
+    return {"contract_version":"review.v2", "quality_assessments":assessments, "findings":{"rules":[], "additional":[]}}
+
+
 class Base(unittest.TestCase):
     """Seeds one project, task and draft so save_review can be exercised for real."""
 
@@ -281,6 +300,22 @@ class RegulatoryContextTests(Base):
         self.assertEqual(app.policy_references("DEMO-TONE-001", context), [])
         self.assertEqual(app.policy_references("invented-rule", context), [])
 
+    def test_product_scope_filters_sector_references_and_keeps_general_consumer_reference(self):
+        cosmetics = app.reference_context("cosmetics")
+        food = app.reference_context("food_beverage")
+        unknown = app.reference_context("unknown")
+
+        cosmetic_ids = {item["id"] for item in cosmetics["references"]}
+        food_ids = {item["id"] for item in food["references"]}
+        unknown_ids = {item["id"] for item in unknown["references"]}
+        self.assertIn("BPOM-18-2024", cosmetic_ids)
+        self.assertNotIn("BPOM-18-2024", food_ids)
+        self.assertNotIn("BPOM-18-2024", unknown_ids)
+        self.assertIn("UU-PK-8-1999", food_ids)
+        self.assertIn("UU-PK-8-1999", unknown_ids)
+        self.assertEqual(unknown["product_category"], "unknown")
+        self.assertTrue(all("DEMO-" not in item["title"] for item in unknown["references"]))
+
     def test_reference_snapshot_survives_reconnect_and_map_change(self):
         from unittest.mock import patch
         db = app.connect()
@@ -288,7 +323,7 @@ class RegulatoryContextTests(Base):
         task["tone"] = "Warm"
         version = db.execute("SELECT * FROM content_versions WHERE id=?", (self.version_id,)).fetchone()
         try:
-            with patch.object(app, "llm_json", return_value=({"findings":[]}, {})) as model:
+            with patch.object(app, "llm_json", return_value=(reviewer_v2_output(), {})) as model:
                 result = app.review_draft(db, self.owner, task, version, [], "Fake review failed")
             sent = model.call_args.args[2]["regulatory_context"]
             db.commit()
@@ -306,7 +341,10 @@ class RegulatoryContextTests(Base):
             review = serialized["versions"][-1]["review"]
             self.assertEqual(review["reference_map_version"], sent["map_version"])
             self.assertEqual(review["reference_context_kind"], "review_snapshot")
-            self.assertTrue(any(item["policy_references"] for item in review["findings"]))
+            self.assertEqual(review["product_category"], "unknown")
+            policy_ids = {reference["id"] for finding in review["findings"] for reference in finding["policy_references"]}
+            self.assertIn("UU-PK-8-1999", policy_ids)
+            self.assertNotIn("BPOM-18-2024", policy_ids)
             self.assertFalse(serialized["versions"][-1]["human_approved"])
         finally:
             db.close()

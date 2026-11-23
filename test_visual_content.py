@@ -47,7 +47,7 @@ class VisualWorkflowTests(unittest.TestCase):
         db.execute("UPDATE content_versions SET review_status=? WHERE id=?", ("pass" if review == "Pass" else "fail", version_id))
         db.commit()
         db.close()
-        with patch.object(app, "call_image_provider", return_value=(PNG, "image/png")):
+        with patch.object(app, "call_comfyui_provider", return_value=(PNG, "image/png")):
             code, _, data = self.request("/api/generate-image", "POST", {"task_id": task_id, "prompt": "A plain neutral concept, no text", "ratio": "portrait"}, self.cookie, self.csrf)
         self.assertEqual(code, 201, data)
         return task_id, version_id, data["image"]["id"]
@@ -142,6 +142,11 @@ class VisualWorkflowTests(unittest.TestCase):
         self.assertEqual(self.approve_visual(visual["id"])[0], 200)
         code, _, edited = self.request("/api/edit", "POST", {"task_id": task_id, "content": COPY.replace("Kenali FreshGlow", "Lihat FreshGlow")}, self.cookie, self.csrf)
         self.assertEqual(code, 201, edited)
+        code, _, images = self.request("/api/images?task_id=" + task_id, cookie=self.cookie)
+        self.assertEqual(code, 200, images)
+        stale = next(item for item in images["compositions"] if item["id"] == visual["id"])
+        self.assertEqual(stale["status"], "stale")
+        self.assertIsNone(stale["download_url"])
         self.assertEqual(self.request(visual["preview_url"] + "&download=1", cookie=self.cookie)[0], 409)
         self.assertEqual(self.approve_visual(visual["id"])[0], 409)
         self.assertEqual(self.compose(image_id, version_id)[0], 409)
@@ -158,7 +163,7 @@ class VisualWorkflowTests(unittest.TestCase):
         self.assertEqual(first["composition"]["id"], second["composition"]["id"])
         self.approve_copy(task_id)
         self.assertEqual(self.approve_visual(first["composition"]["id"])[0], 200)
-        with patch.object(app, "call_image_provider", return_value=(PNG, "image/png")):
+        with patch.object(app, "call_comfyui_provider", return_value=(PNG, "image/png")):
             code, _, generated = self.request("/api/generate-image", "POST", {"task_id": task_id, "prompt": "Another composition", "ratio": "square"}, self.cookie, self.csrf)
         self.assertEqual(code, 201, generated)
         _, _, composed = self.compose(generated["image"]["id"])
@@ -167,7 +172,7 @@ class VisualWorkflowTests(unittest.TestCase):
 
     def test_model_failure_leaves_no_images_or_visual_approvals(self):
         task_id, _ = self.task(self.owner, self.project_id)
-        with patch.object(app, "call_image_provider", side_effect=app.APIError(504, "Timeout", "image_provider_timeout")):
+        with patch.object(app, "call_comfyui_provider", side_effect=app.APIError(504, "Timeout", "image_provider_timeout")):
             code, _, body = self.request("/api/generate-image", "POST", {"task_id": task_id, "prompt": "Neutral concept"}, self.cookie, self.csrf)
         self.assertEqual(code, 504, body)
         db = app.connect()
@@ -220,7 +225,7 @@ class VisualWorkflowTests(unittest.TestCase):
 
     def test_writer_visual_direction_reaches_the_image_provider(self):
         task_id, version_id, _ = self.seed_visual()
-        with patch.object(app, "call_image_provider", return_value=(PNG, "image/png")) as provider:
+        with patch.object(app, "call_comfyui_provider", return_value=(PNG, "image/png")) as provider:
             code, _, body = self.request("/api/generate-image", "POST", {"task_id": task_id, "prompt": "Soft daylight", "ratio": "landscape"}, self.cookie, self.csrf)
         self.assertEqual(code, 201, body)
         prompt, size = provider.call_args.args
@@ -268,6 +273,99 @@ class VisualWorkflowTests(unittest.TestCase):
         db = app.connect()
         self.assertEqual(db.execute("SELECT count(*) FROM tasks WHERE project_id=?", (self.project_id,)).fetchone()[0], 2)
         db.close()
+
+    def test_visual_download_requires_human_copy_and_visual_approval(self):
+        task_id, version_id, image_id = self.seed_visual(status="approved_pending_human", review="Pass")
+        code, _, composed = self.compose(image_id, version_id)
+        self.assertEqual(code, 201, composed)
+        visual = composed["composition"]
+        self.assertEqual(visual["status"], "pending_copy_approval")
+        self.assertIsNone(visual["download_url"])
+        preview_code, preview_headers, preview = self.request(visual["preview_url"], cookie=self.cookie)
+        self.assertEqual(preview_code, 200)
+        self.assertNotIn("attachment", preview_headers.get("Content-Disposition", ""))
+        self.assertTrue(preview.startswith(b"<svg"))
+        self.assertEqual(self.request(visual["preview_url"] + "&download=1", cookie=self.cookie)[0], 409)
+        self.assertEqual(self.request(f"/api/image-file?id={image_id}&download=1", cookie=self.cookie)[0], 409)
+        _, _, before_human_approval = self.request("/api/export", cookie=self.cookie)
+        self.assertEqual(before_human_approval["visual_compositions"], [])
+        db = app.connect()
+        latest = db.execute("SELECT human_approved,review_status FROM content_versions WHERE id=?", (version_id,)).fetchone()
+        self.assertEqual(tuple(latest), (0, "pass"))
+        db.close()
+        self.approve_copy(task_id)
+        code, _, after_copy_approval = self.request("/api/images?task_id=" + task_id, cookie=self.cookie)
+        self.assertEqual(code, 200, after_copy_approval)
+        pending_visual = next(item for item in after_copy_approval["compositions"] if item["id"] == visual["id"])
+        self.assertEqual(pending_visual["status"], "pending_visual_approval")
+        self.assertIsNone(pending_visual["download_url"])
+        self.assertEqual(self.request(visual["preview_url"] + "&download=1", cookie=self.cookie)[0], 409)
+        code, _, approved = self.approve_visual(visual["id"])
+        self.assertEqual(code, 200, approved)
+        self.assertEqual(approved["composition"]["status"], "human_approved")
+        self.assertEqual(approved["composition"]["version_id"], version_id)
+        self.assertEqual(approved["composition"]["image_id"], image_id)
+        code, headers, downloaded = self.request(approved["composition"]["download_url"], cookie=self.cookie)
+        self.assertEqual(code, 200)
+        self.assertIn("attachment", headers["Content-Disposition"])
+        self.assertEqual(downloaded, preview)
+        self.assertEqual(self.request(f"/api/image-file?id={image_id}&download=1", cookie=self.cookie)[0], 409)
+        _, _, after_human_approval = self.request("/api/export", cookie=self.cookie)
+        self.assertEqual([item["id"] for item in after_human_approval["visual_compositions"]], [visual["id"]])
+        self.assertEqual(base64.b64decode(after_human_approval["visual_compositions"][0]["svg_content_base64"]), downloaded)
+
+    def test_only_the_exact_approved_visual_can_be_downloaded_and_other_visuals_stay_unapproved(self):
+        task_id, version_id, first_image_id = self.seed_visual()
+        _, _, first = self.compose(first_image_id, version_id)
+        with patch.object(app, "call_comfyui_provider", return_value=(PNG, "image/png")):
+            code, _, second_image = self.request("/api/generate-image", "POST", {"task_id": task_id, "prompt": "Another neutral concept", "ratio": "portrait"}, self.cookie, self.csrf)
+        self.assertEqual(code, 201, second_image)
+        _, _, second = self.compose(second_image["image"]["id"], version_id)
+        first_visual, second_visual = first["composition"], second["composition"]
+        self.assertEqual(first_visual["status"], "pending_copy_approval")
+        self.assertEqual(second["composition"]["status"], "pending_copy_approval")
+        self.approve_copy(task_id)
+        self.assertEqual(self.approve_visual(second_visual["id"])[0], 200)
+        code, _, images = self.request("/api/images?task_id=" + task_id, cookie=self.cookie)
+        self.assertEqual(code, 200, images)
+        current = {item["id"]: item for item in images["compositions"]}
+        self.assertEqual(current[first_visual["id"]]["status"], "pending_visual_approval")
+        self.assertIsNone(current[first_visual["id"]]["download_url"])
+        self.assertEqual(current[second_visual["id"]]["status"], "human_approved")
+        self.assertEqual(self.request(first_visual["preview_url"] + "&download=1", cookie=self.cookie)[0], 409)
+        self.assertEqual(self.request(current[second_visual["id"]]["download_url"], cookie=self.cookie)[0], 200)
+        with patch.object(app, "call_comfyui_provider", return_value=(PNG, "image/png")):
+            code, _, third_image = self.request("/api/generate-image", "POST", {"task_id": task_id, "prompt": "A separate visual concept", "ratio": "portrait"}, self.cookie, self.csrf)
+        self.assertEqual(code, 201, third_image)
+        code, _, after_new_candidate = self.request("/api/images?task_id=" + task_id, cookie=self.cookie)
+        self.assertEqual(code, 200, after_new_candidate)
+        still_approved = next(item for item in after_new_candidate["compositions"] if item["id"] == second_visual["id"])
+        self.assertEqual(still_approved["status"], "human_approved")
+        self.assertEqual(self.request(still_approved["download_url"], cookie=self.cookie)[0], 200)
+        db = app.connect()
+        third = db.execute("SELECT * FROM generated_images WHERE id=?", (third_image["image"]["id"],)).fetchone()
+        self.assertEqual(app.serialize_generated_image(third)["media_url"], f"/api/image-file?id={third_image['image']['id']}")
+        db.close()
+        self.assertEqual(self.request(f"/api/image-file?id={third_image['image']['id']}&download=1", cookie=self.cookie)[0], 409)
+
+    def test_modified_approved_visual_is_disabled_and_omitted_from_export(self):
+        task_id, _, image_id = self.seed_visual()
+        _, _, data = self.compose(image_id)
+        visual = data["composition"]
+        self.approve_copy(task_id)
+        self.assertEqual(self.approve_visual(visual["id"])[0], 200)
+        db = app.connect()
+        db.execute("UPDATE visual_compositions SET svg_content=? WHERE id=?", (b"changed after approval", visual["id"]))
+        db.commit()
+        db.close()
+        code, _, images = self.request("/api/images?task_id=" + task_id, cookie=self.cookie)
+        self.assertEqual(code, 200, images)
+        changed = next(item for item in images["compositions"] if item["id"] == visual["id"])
+        self.assertEqual(changed["status"], "visual_changed")
+        self.assertIsNone(changed["download_url"])
+        self.assertEqual(self.request(visual["preview_url"] + "&download=1", cookie=self.cookie)[0], 409)
+        _, _, export = self.request("/api/export", cookie=self.cookie)
+        self.assertEqual(export["visual_compositions"], [])
 
     def test_revision_limit_cannot_be_bypassed_by_visual_approval(self):
         task_id, _, image_id = self.seed_visual(status="escalated", review="Fail")
