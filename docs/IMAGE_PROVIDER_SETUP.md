@@ -1,3 +1,7 @@
+# Current provider setup (2026-11-23)
+
+The application supports local ComfyUI plus Cloudflare Workers AI text-to-image. The Cloudflare provider calls the Cloudflare REST API directly from the RekaRasa backend; it does not require deploying the legacy sample Worker in `integrations/cloudflare-image/` or connecting to local ComfyUI. With `IMAGE_PROVIDER=comfyui` and `IMAGE_PROVIDER_FALLBACK=cloudflare`, concept generation automatically falls back to Cloudflare on ComfyUI provider errors; photo editing remains ComfyUI-only. Use [Cloudflare image setup](CLOUDFLARE_IMAGE_SETUP.md) for current configuration.
+
 # Image-to-image addition (2026-11-05)
 
 ComfyUI now supports text-to-image, source-photo image-to-image with adjustable strength, and protected background editing. The installed checkpoint remains SD 1.5. See [handbook mapping and verification](CHALLENGE_C_IMPLEMENTATION_2026-11-05.md) for the 66 targeted tests and two actual local generations. Sections below record earlier setup passes; their verification limits describe those earlier passes.

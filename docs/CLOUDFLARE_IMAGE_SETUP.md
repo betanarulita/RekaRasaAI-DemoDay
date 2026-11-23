@@ -1,94 +1,37 @@
-# Cloudflare text concepts for RekaRasa
+# Cloudflare Workers AI image generation
 
-## What this enables
+RekaRasa's backend calls Cloudflare Workers AI directly. **No separate Cloudflare Worker deployment is required.** When configured, ComfyUI remains the primary provider and Cloudflare is used automatically for text-to-image concepts if ComfyUI returns an upstream/unavailable error. Image-to-image and background editing continue to require ComfyUI. Cloudflare can also be selected explicitly for text-to-image concepts.
 
-An explicit Cloudflare option in the image studio's **New image from text** mode. ComfyUI stays the default, including the automatic brief-to-image path. Original-photo composition and protected background editing retain their existing paths. Cloudflare receives the concept prompt, including brief/source context and Writer visual direction; it does not receive uploaded photos in this integration.
+The configured model is `@cf/black-forest-labs/flux-1-schnell`. Cloudflare documents a maximum prompt length of 2,048 characters and returns the generated image as base64. The model generates a square source image; RekaRasa fits that image to the selected canvas, which can crop some edges on portrait or landscape canvases. This integration does not edit uploaded reference images.
 
-Images use the existing private storage, Project ownership checks, provider/model audit record, versioned copy composition and human visual approval. Text compliance review does not validate visual product identity. No automatic fallback or generation retry is introduced.
+## Cloudflare account setup
 
-## Free allocation and limits
+1. In the Cloudflare dashboard, open **Workers AI** and review the current plan and usage allocation. Workers AI currently documents 10,000 Neurons per day at no charge on Workers Free. Quota is shared across the account, resets at 00:00 UTC, and requests can fail after it is exhausted. Confirm current pricing before enabling generation; the confirmation flag in RekaRasa does not enforce a billing cap.
+2. Create a Cloudflare API token for Workers AI. Use the permissions Cloudflare documents for the model-run API (Workers AI Read; the dashboard's Workers AI token template may include both Read and Edit).
+3. Copy the account ID from the dashboard. Keep the API token private; never put it in browser code, Git, or chat.
 
-Keep the Cloudflare account on **Workers Free**. Workers AI documents a free allocation of **10,000 Neurons per day**, resetting at 00:00 UTC. On Workers Free, requests fail when that allocation is exceeded; extra usage requires Workers Paid. The repo's claim of 100,000 AI calls daily is not the Workers AI allocation.
+## Local development
 
-The model is fixed to `@cf/stabilityai/stable-diffusion-xl-base-1.0`. Its availability, beta status and pricing can change. This setup does not promise a fixed number of free images or detect later account plan changes. Check billing before enabling it; do not upgrade to Paid if the goal is no usage charges.
-
-The supplied rate limiter targets two generation requests per minute **per Cloudflare location**. It is approximate, not a global daily quota or spending cap. Missing limiter bindings block generation. Health checks do not invoke the model and do not measure remaining allocation.
-
-## Worker setup
-
-Files are in [integrations/cloudflare-image](../integrations/cloudflare-image/):
-
-- [worker.js](../integrations/cloudflare-image/worker.js): server endpoint, authentication, bounded input/output, fixed model and safe errors.
-- [wrangler.jsonc](../integrations/cloudflare-image/wrangler.jsonc): Worker name, AI binding and rate limiter.
-
-The most reproducible path is Wrangler 4.36 or newer, because the rate limiter needs binding configuration. Installing/running Wrangler and deployment are operator actions; they have not been run here.
-
-1. Verify **Workers Free** in the Cloudflare dashboard.
-2. If you already created a Hello World Worker, change `name` in the config to that exact Worker name. Otherwise choose an unused name.
-3. Open a terminal in the integration folder and authenticate:
-
-   ```powershell
-   cd D:\RekaRasaAI-DemoDay\integrations\cloudflare-image
-   npx wrangler@4 login
-   ```
-
-4. Generate a random secret locally. Save it in your password manager and the application's local environment; never paste it in chat or frontend code. For example:
-
-   ```powershell
-   python -c "import secrets; print(secrets.token_urlsafe(32))"
-   ```
-
-5. Create the Worker secret. Paste the generated value at the hidden prompt:
-
-   ```powershell
-   npx wrangler@4 secret put API_KEY
-   ```
-
-6. Deploy the supplied config and code:
-
-   ```powershell
-   npx wrangler@4 deploy
-   ```
-
-   If Wrangler asks to create the named Worker during secret setup, ensure it is the intended account and name. Do not accept a paid-plan upgrade. The namespace ID `10427` should be changed if another limiter in your account already uses it and you do not intend to share counters.
-
-For the manual dashboard flow, **Start with Hello World** creates the Worker, and its code editor accepts the supplied Worker code. Add `API_KEY` as a **Secret** and a **Workers AI** binding named `AI`. The `RATE_LIMITER` binding must also be configured with limit 2, period 60 and a unique namespace ID. If that binding is not offered by the dashboard, use the supplied Wrangler config; pasting code alone is not the complete setup. No API token should be embedded in the Worker source.
-
-## Application configuration
-
-In the local environment file, add these settings yourself:
+Set these variables in the local server environment:
 
 ```dotenv
 IMAGE_PROVIDER=comfyui
-CLOUDFLARE_IMAGE_URL=https://YOUR-WORKER.YOUR-SUBDOMAIN.workers.dev
-CLOUDFLARE_IMAGE_API_KEY=THE_SAME_SECRET_AS_WORKER_API_KEY
+IMAGE_PROVIDER_FALLBACK=cloudflare
+CLOUDFLARE_ACCOUNT_ID=your_account_id
+CLOUDFLARE_API_TOKEN=your_private_api_token
 CLOUDFLARE_WORKERS_FREE_CONFIRMED=1
 ```
 
-The confirmation flag records your manual check, not a billing guarantee. Until URL, secret (at least 32 characters), and confirmation are configured, the Cloudflare choice is disabled. The client accepts a root HTTPS `workers.dev` URL only; redirects are rejected so credentials are not forwarded elsewhere.
+`IMAGE_PROVIDER=comfyui` keeps local ComfyUI as the primary provider. `IMAGE_PROVIDER_FALLBACK=cloudflare` enables automatic fallback for text-to-image concepts when ComfyUI is busy or returns a 429, 502, 503, or 504 provider error. It does not change image editing. Cloudflare can also be selected directly in the image studio. Restart the backend after changing environment variables. The Cloudflare connection check reads the model schema and does not generate an image or check remaining quota.
 
-Restart RekaRasa to reload backend and environment changes, then refresh the browser. In the image studio choose **New image from text**, select **Cloudflare - text concepts**, and use **Check connection**. Only pressing **Generate new concept** invokes generation. Use ComfyUI's photo editing or original-photo composition for actual product photos.
+## WorkBuddy hosting
 
-The WorkBuddy CLI also accepts `generate-image --provider cloudflare`. Omitting the provider keeps ComfyUI. Old image history is preserved and is not proof of the active provider.
+Set the same server-side variables in the existing WorkBuddy app's environment settings. For ComfyUI-primary with Cloudflare fallback, use `IMAGE_PROVIDER=comfyui` and `IMAGE_PROVIDER_FALLBACK=cloudflare`. Because WorkBuddy cannot reach ComfyUI on the developer's PC, hosted text-to-image requests will use Cloudflare when ComfyUI is unavailable. Add the Account ID and API token as private environment variables, and set the confirmation flag only after checking the account plan. Redeploy/restart the existing app after updating its environment; preserve its current app URL and database settings.
 
-## Failure handling
+Cloudflare receives the image prompt directly from the RekaRasa backend. Do not send API tokens to the frontend. Fallback occurs only for ComfyUI busy/rate-limit/unavailable errors; invalid user input and editing requests do not fallback. For Cloudflare error `429`, check Workers AI quota/rate limits; for `401` or `403`, verify token permissions and Account ID.
 
-- **Setup required:** missing URL, secret or Free-plan confirmation.
-- **Authentication rejected:** application secret and Worker `API_KEY` differ.
-- **Setup incomplete:** missing `AI` or `RATE_LIMITER` binding, or an incompatible old Worker.
-- **429:** local rate limit or upstream allocation/rate limit. Inspect usage before retrying.
-- **503:** generation unavailable, potentially including an upstream quota failure. Inspect Worker usage and configuration; the application does not switch providers.
-- **Timeout:** the upstream job may still finish. No automatic retry is made.
+## References
 
-Worker logs and API errors deliberately omit the secret and prompt. Cloudflare itself receives the prompt as the selected processor. Never expose this secret in browser requests or commit local environment files.
-
-## Implementation status
-
-Local integration prepared. No deployment, live Cloudflare authentication, quota verification, image generation or automated tests have been performed in this pass. Syntax and whitespace checks are separate from live verification. Existing HTTP generation remains synchronous; durable background jobs are separate work.
-
-## Official references
-
-- [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)
-- [SDXL base model and input schema](https://developers.cloudflare.com/workers-ai/models/stable-diffusion-xl-base-1.0/)
-- [Rate limiting bindings and accuracy](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
-- [Reference repository](https://github.com/saurav-z/free-image-generation-api) (reviewed as an example; its Worker is not copied unchanged)
+- [FLUX.1 Schnell model and input/output format](https://developers.cloudflare.com/workers-ai/models/flux-1-schnell/)
+- [Workers AI pricing and free allocation](https://developers.cloudflare.com/workers-ai/platform/pricing/)
+- [Workers AI REST API setup](https://developers.cloudflare.com/workers-ai/get-started/rest-api/)

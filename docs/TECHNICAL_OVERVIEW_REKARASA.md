@@ -129,10 +129,10 @@ Variabel utama dijelaskan di [`.env.example`](../.env.example):
 | `IMAGE_STORAGE_PATH` | default di samping DB | Direktori file gambar |
 | `MODEL` | `openai/gpt-oss-20b` | Model teks Groq |
 | `GROQ_API_KEY` | kosong di template | Secret provider, hanya sisi server |
-| `IMAGE_PROVIDER` | source saat ini memilih ComfyUI | Provider gambar aktif pada source saat ini |
+| `IMAGE_PROVIDER`, `IMAGE_PROVIDER_FALLBACK` | `comfyui`, fallback kosong | Provider gambar utama dan fallback opsional untuk konsep teks |
 | `COMFYUI_URL` | `http://127.0.0.1:8188` | URL service ComfyUI |
 | `COMFYUI_CHECKPOINT`, `COMFYUI_TIMEOUT` | checkpoint SD, `300` | Pengaturan workflow gambar |
-| `CLOUDFLARE_IMAGE_URL`, `CLOUDFLARE_IMAGE_API_KEY` | kosong | Integrasi gambar opsional yang harus dikonfigurasi eksplisit |
+| `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | kosong | Kredensial Workers AI langsung, hanya sisi server |
 | `SMTP_*`, `APP_BASE_URL` | SMTP kosong | Email opsional dan URL dasar aplikasi |
 | `SENTRY_DSN`, `LOG_LEVEL` | kosong, `INFO` | Observability opsional |
 
@@ -153,7 +153,7 @@ Server berjalan di foreground; hentikan dari terminal yang sama dengan `Ctrl+C`.
 
 ## 7. Image generation
 
-Provider gambar source saat ini adalah ComfyUI dengan URL default `127.0.0.1:8188`. Aplikasi memiliki endpoint status, generate, edit, serta penyimpanan metadata dan file output. File gambar disimpan pada `IMAGE_STORAGE_PATH`; default-nya mengikuti direktori database. Cloudflare merupakan opsi terpisah dengan konfigurasi eksplisit, bukan fallback otomatis. Periksa [`docs/IMAGE_PROVIDER_SETUP.md`](./IMAGE_PROVIDER_SETUP.md) sebelum mengaktifkan provider.
+Provider gambar lokal default adalah ComfyUI dengan URL `127.0.0.1:8188`. `IMAGE_PROVIDER_FALLBACK=cloudflare` mengaktifkan fallback Cloudflare Workers AI untuk konsep teks ketika ComfyUI sibuk atau gagal karena provider. WorkBuddy dapat memanggil Cloudflare langsung melalui API tanpa koneksi ke ComfyUI lokal. Model FLUX.1 Schnell bukan untuk edit foto referensi; hasil square dipaskan ke canvas yang diminta. File gambar disimpan pada `IMAGE_STORAGE_PATH`; default-nya mengikuti direktori database. Periksa [`docs/CLOUDFLARE_IMAGE_SETUP.md`](./CLOUDFLARE_IMAGE_SETUP.md) sebelum mengaktifkannya.
 
 HTTP 200 dari endpoint image-status hanya menyatakan endpoint aplikasi menjawab; nilai `ready/state` di body yang menentukan kesiapan provider. Pada pemeriksaan runtime 8003 yang tersedia dalam sesi sebelumnya, status ComfyUI dilaporkan `offline`; keadaan itu harus dicek ulang di lingkungan yang akan dipakai.
 

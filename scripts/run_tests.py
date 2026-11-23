@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 os.environ.update({key: "" for key in (
     "SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SENTRY_DSN",
     "GROQ_API_KEY", "OPENAI_API_KEY", "POLLINATIONS_TOKEN",
-    "AGNES_API_KEY", "CLOUDFLARE_IMAGE_API_KEY", "CLOUDFLARE_IMAGE_URL",
+    "AGNES_API_KEY", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID",
 )})
 os.environ.update({"COMFYUI_URL": "http://127.0.0.1:1", "COMFYUI_CHECKPOINT": ""})
 os.environ["CERTIFICATE_REGISTRY_MODE"] = "manual"

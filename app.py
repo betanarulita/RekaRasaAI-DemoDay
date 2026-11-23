@@ -185,7 +185,8 @@ LLM_PROVIDER = "groq"
 MODEL = os.getenv("MODEL", "openai/gpt-oss-20b")
 QWEN_TEXT_FALLBACK_MODEL = "qwen/qwen3.8-27b"
 VISUAL_REVIEW_MODEL = os.getenv("VISUAL_REVIEW_MODEL", "qwen/qwen3.8-27b").strip()
-IMAGE_PROVIDER = "comfyui"
+IMAGE_PROVIDER = os.getenv("IMAGE_PROVIDER", "comfyui").strip().lower()
+IMAGE_PROVIDER_FALLBACK = os.getenv("IMAGE_PROVIDER_FALLBACK", "").strip().lower()
 COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
 COMFYUI_CHECKPOINT = os.getenv("COMFYUI_CHECKPOINT", "").strip()
 COMFYUI_TIMEOUT = max(1, min(int(os.getenv("COMFYUI_TIMEOUT", "300")), 900))
@@ -3353,7 +3354,7 @@ def privacy_disclosure() -> dict:
         },
         "sent_to_image_model": {
             "provider": IMAGE_PROVIDER,
-            "optional_provider": "Cloudflare Workers AI receives the concept prompt only when explicitly selected. ComfyUI remains the default; no automatic fallback is used.",
+            "optional_provider": "Cloudflare Workers AI receives concept prompts when selected, or as the configured fallback when ComfyUI is busy or unavailable.",
             "local_photo_modes": "Image-to-image sends the selected Project photo to ComfyUI. Protected editing sends that photo and its protection mask. Image generation is not training or official product verification.",
             "fields": ["an image prompt built from the brief, a short source summary, the Writer VISUAL block and the creator's image direction"],
             "never_sent": ["email address", "password", "session cookie"],
@@ -3728,8 +3729,9 @@ def comfyui_status() -> dict:
 
 def image_provider_options() -> list[dict]:
     remote = cloudflare_images.status()
-    return [{"id": "comfyui", "label": "ComfyUI - local", "available": True, "modes": ["concept", "img2img", "edit"], "note": "Local processing. No automatic fallback."},
-            {"id": "cloudflare", "label": "Cloudflare - text concepts", "available": remote["ready"], "modes": ["concept"], "note": remote["message"]}]
+    comfy_note = "Local processing. Cloudflare is used for text concepts if ComfyUI is unavailable." if IMAGE_PROVIDER_FALLBACK == "cloudflare" else "Local processing. No automatic fallback."
+    return [{"id": "comfyui", "label": "ComfyUI - local", "available": True, "modes": ["concept", "img2img", "edit"], "note": comfy_note},
+            {"id": "cloudflare", "label": "Cloudflare Workers AI - FLUX.1 Schnell", "available": remote["ready"], "modes": ["concept"], "note": remote["message"]}]
 
 
 def call_image_provider(prompt: str, size: str, provider: str | None = None, seed=None) -> tuple[bytes, str]:
@@ -3741,6 +3743,28 @@ def call_image_provider(prompt: str, size: str, provider: str | None = None, see
     if (provider or IMAGE_PROVIDER) != "comfyui":
         raise APIError(400, "Choose ComfyUI or Cloudflare for text concepts.", "invalid_image_provider")
     return call_comfyui_provider(prompt, size, seed=seed)
+
+
+def call_image_provider_with_fallback(prompt: str, size: str, provider: str | None = None, seed=None) -> tuple[bytes, str, str]:
+    """Use the selected provider, with optional Cloudflare fallback for text concepts."""
+    selected = (provider or IMAGE_PROVIDER).strip().lower()
+    if selected == "cloudflare":
+        image, media_type = call_image_provider(prompt, size, provider="cloudflare", seed=seed)
+        return image, media_type, "cloudflare"
+    if selected != "comfyui":
+        raise APIError(400, "Choose ComfyUI or Cloudflare for text concepts.", "invalid_image_provider")
+    try:
+        image, media_type = call_comfyui_provider(prompt, size, seed=seed)
+        return image, media_type, "comfyui"
+    except APIError as primary_error:
+        if IMAGE_PROVIDER_FALLBACK != "cloudflare" or primary_error.status not in (409, 429, 502, 503, 504):
+            raise
+        log.warning("image.provider_fallback", extra={"from_provider": "comfyui", "to_provider": "cloudflare", "reason": primary_error.code})
+        try:
+            image, media_type = call_image_provider(prompt, size, provider="cloudflare", seed=seed)
+            return image, media_type, "cloudflare"
+        except APIError as fallback_error:
+            raise APIError(503, "ComfyUI could not generate the image and Cloudflare fallback also failed: " + fallback_error.message, "image_providers_unavailable") from None
 
 
 def call_comfyui_provider(prompt: str, size: str, reference=None, mask=None, strength=0.75, seed=None) -> tuple[bytes, str]:
@@ -4914,9 +4938,7 @@ def application(environ, start_response):
             generation_seed = secrets.randbelow(2**32) if generation_seed is None else generation_seed
             actual_provider = str(data.get("provider", IMAGE_PROVIDER)).strip().lower()
             if actual_provider not in ("comfyui", "cloudflare"):
-                raise APIError(400, "Choose ComfyUI or Cloudflare. No automatic fallback is used.", "invalid_image_provider")
-            if mode == "concept" and actual_provider != "comfyui":
-                raise APIError(400, "Text-to-image in this workspace uses local ComfyUI.", "invalid_image_provider")
+                raise APIError(400, "Choose ComfyUI or Cloudflare for image generation.", "invalid_image_provider")
             if mode in ("original", "edit", "img2img") and actual_provider != "comfyui":
                 raise APIError(400, "Selected-photo processing is available through ComfyUI only.", "invalid_image_provider")
             actual_size, asset, mask = IMAGE_SIZES[ratio], None, None
@@ -4948,10 +4970,9 @@ def application(environ, start_response):
                 combined_prompt = (shared_visual_direction + direction)[:10000]
                 image_bytes, media_type = call_comfyui_provider(combined_prompt, actual_size, reference=asset["content"], mask=mask, strength=strength, seed=generation_seed)
             elif mode == "concept":
-                if actual_provider == "comfyui":
-                    image_bytes, media_type = call_comfyui_provider(combined_prompt, actual_size, seed=generation_seed)
-                else:
-                    image_bytes, media_type = call_image_provider(combined_prompt, actual_size, provider=actual_provider, seed=generation_seed)
+                image_bytes, media_type, actual_provider = call_image_provider_with_fallback(
+                    combined_prompt, actual_size, provider=actual_provider, seed=generation_seed
+                )
             else:
                 raise APIError(400, "Choose Compose selected photo, text-to-image, image-to-image, or protected background editing.", "invalid_image_options")
             db.execute("BEGIN IMMEDIATE")
