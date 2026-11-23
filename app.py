@@ -183,6 +183,7 @@ MAX_ITERATIONS = 3
 SESSION_SECONDS = 60 * 60 * 24 * 14
 LLM_PROVIDER = "groq"
 MODEL = os.getenv("MODEL", "openai/gpt-oss-20b")
+QWEN_TEXT_FALLBACK_MODEL = "qwen/qwen3.8-27b"
 VISUAL_REVIEW_MODEL = os.getenv("VISUAL_REVIEW_MODEL", "qwen/qwen3.8-27b").strip()
 IMAGE_PROVIDER = "comfyui"
 COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
@@ -599,6 +600,7 @@ AUDIENCE_OPTIONS = (
 PROJECT_PREFERENCE_KEYS = (
     "audience_options", "audience_custom", "audience", "audience_age", "content_language",
     "style", "tone", "tone_preset", "output_preferences", "platform_preferences", "custom_format",
+    "text_model_routing",
 )
 
 
@@ -645,6 +647,10 @@ def normalize_project_preferences(value: object) -> dict:
     if language not in ("", "follow_brief", "Indonesian", "English", "Chinese"):
         raise APIError(400, "Choose a supported content language or follow the language of the brief.", "invalid_preferences")
     result["content_language"] = language
+    text_model_routing = value.get("text_model_routing", "gpt_then_qwen")
+    if text_model_routing not in ("gpt_only", "gpt_then_qwen"):
+        raise APIError(400, "Choose GPT only or GPT with Qwen fallback.", "invalid_preferences")
+    result["text_model_routing"] = text_model_routing
     for key, limit in (("style", 300), ("tone", 500), ("tone_preset", 80), ("custom_format", 120)):
         item = value.get(key, "")
         if not isinstance(item, str) or len(item.strip()) > limit:
@@ -1337,6 +1343,12 @@ def llm_json(role: str, system: str, payload: dict, output_schema: dict) -> tupl
         raise APIError(503, f"AI generation is unavailable: the server has no {llm_provider_label()} API key.", "provider_unconfigured")
     wire_schema = provider_schema(output_schema)
     serialized_payload = json.dumps(payload, ensure_ascii=False)
+    preferences = payload.get("preferences") if isinstance(payload, dict) else {}
+    preferences = preferences if isinstance(preferences, dict) else {}
+    fallback_enabled = (
+        preferences.get("text_model_routing", "gpt_then_qwen") == "gpt_then_qwen"
+        and MODEL != QWEN_TEXT_FALLBACK_MODEL
+    )
     request_body = {
         "model": MODEL,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": serialized_payload}],
@@ -1369,31 +1381,53 @@ def llm_json(role: str, system: str, payload: dict, output_schema: dict) -> tupl
             "output_schema_sha256": hashlib.sha256(json.dumps(wire_schema, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest(),
         }
     result = None
-    for attempt in range(LLM_MAX_ATTEMPTS):
-        req = Request(GROQ_BASE_URL + "/chat/completions", data=body, headers={"Authorization": "Bearer " + key, "Content-Type": "application/json", "User-Agent": "RekaRasaAI/1.0"}, method="POST")
-        try:
-            with urlopen(req, timeout=LLM_TIMEOUT_SECONDS) as response:
-                result = json.loads(response.read(1_000_000))
-            PROVIDER_STATUS = "verified"
+    selected_model = MODEL
+    models = [MODEL, QWEN_TEXT_FALLBACK_MODEL] if fallback_enabled else [MODEL]
+    for model_index, current_model in enumerate(models):
+        request_body["model"] = current_model
+        if role == "Reviewer" and provider_failure_metadata is not None:
+            provider_failure_metadata["model"] = current_model
+        body = json.dumps(request_body).encode()
+        attempts = LLM_MAX_ATTEMPTS if model_index == 0 or not fallback_enabled else 1
+        for attempt in range(attempts):
+            req = Request(GROQ_BASE_URL + "/chat/completions", data=body, headers={"Authorization": "Bearer " + key, "Content-Type": "application/json", "User-Agent": "RekaRasaAI/1.0"}, method="POST")
+            try:
+                with urlopen(req, timeout=LLM_TIMEOUT_SECONDS) as response:
+                    result = json.loads(response.read(1_000_000))
+                selected_model = current_model
+                PROVIDER_STATUS = "verified"
+                break
+            except HTTPError as exc:
+                # Switch models only for capacity or upstream availability failures.
+                # Request/schema errors and bad credentials need configuration fixes.
+                retryable_upstream = exc.code == 429 or exc.code >= 500
+                if model_index == 0 and fallback_enabled and retryable_upstream:
+                    log.warning("provider.model_fallback", extra={"role": role, "from_model": MODEL, "to_model": QWEN_TEXT_FALLBACK_MODEL, "upstream_status": exc.code, "reason": "rate_limited" if exc.code == 429 else "upstream_unavailable"})
+                    break
+                if exc.code == 429 and attempt + 1 < attempts:
+                    delay = retry_delay(exc, attempt)
+                    log.warning("provider.rate_limited", extra={"role": role, "model": current_model, "retry_in_seconds": round(delay, 1), "attempt": attempt + 1})
+                    time.sleep(delay)
+                    continue
+                raise provider_error(exc, key, role, provider_failure_metadata, payload)
+            except (URLError, TimeoutError, OSError):
+                if model_index == 0 and fallback_enabled:
+                    PROVIDER_STATUS = "unavailable"
+                    log.warning("provider.model_fallback", extra={"role": role, "from_model": MODEL, "to_model": QWEN_TEXT_FALLBACK_MODEL, "reason": "connection_or_timeout"})
+                    break
+                PROVIDER_STATUS = "unavailable"
+                if role == "Reviewer":
+                    log_reviewer_failure("unavailable", "provider_unavailable", "provider_unavailable", "provider_request")
+                raise APIError(502, "The AI provider could not be reached. Your work has not been marked complete.", "provider_unavailable")
+            except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
+                PROVIDER_STATUS = "output_invalid" if role == "Reviewer" else "unavailable"
+                if role == "Reviewer":
+                    log_reviewer_failure("invalid", "invalid_provider_response", "provider_malformed", "provider_response")
+                raise APIError(502, "The AI provider returned an unreadable response.", "provider_malformed")
+        if result is not None:
             break
-        except HTTPError as exc:
-            # Free tiers throttle hard. Waiting a few seconds beats failing a
-            # request the user already paid a Writer call for.
-            if exc.code == 429 and attempt + 1 < LLM_MAX_ATTEMPTS:
-                log.warning("provider.rate_limited", extra={"role": role, "retry_in_seconds": round(retry_delay(exc, attempt), 1), "attempt": attempt + 1})
-                time.sleep(retry_delay(exc, attempt))
-                continue
-            raise provider_error(exc, key, role, provider_failure_metadata, payload)
-        except (URLError, TimeoutError, OSError):
-            PROVIDER_STATUS = "unavailable"
-            if role == "Reviewer":
-                log_reviewer_failure("unavailable", "provider_unavailable", "provider_unavailable", "provider_request")
-            raise APIError(502, "The AI provider could not be reached. Your work has not been marked complete.", "provider_unavailable")
-        except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
-            PROVIDER_STATUS = "output_invalid" if role == "Reviewer" else "unavailable"
-            if role == "Reviewer":
-                log_reviewer_failure("invalid", "invalid_provider_response", "provider_malformed", "provider_response")
-            raise APIError(502, "The AI provider returned an unreadable response.", "provider_malformed")
+    if result is None:
+        raise APIError(502, "The AI provider could not complete this request with GPT or its Qwen fallback.", "provider_unavailable")
     try:
         text = result["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError):
@@ -1443,7 +1477,7 @@ def llm_json(role: str, system: str, payload: dict, output_schema: dict) -> tupl
         PROVIDER_STATUS = "unavailable"
         raise APIError(502, "The AI provider returned output that did not match the required schema.", "provider_schema_invalid") from None
     usage = result.get("usage", {})
-    usage = {"input_tokens": usage.get("prompt_tokens"), "output_tokens": usage.get("completion_tokens")}
+    usage = {"input_tokens": usage.get("prompt_tokens"), "output_tokens": usage.get("completion_tokens"), "model": selected_model}
     return parsed, usage
 
 
@@ -2125,10 +2159,11 @@ def record_agent(db: sqlite3.Connection, owner: str, task_id: str | None, role: 
     single transaction, eliminating the contention.
     """
     run_id = uid()
-    db.execute("INSERT INTO agent_runs VALUES(?,?,?,?,?,?,?,?,?)", (run_id, task_id, role, MODEL, "completed" if ok else "failed", usage.get("input_tokens"), usage.get("output_tokens"), now(), error_code))
+    used_model = usage.get("model") or MODEL
+    db.execute("INSERT INTO agent_runs VALUES(?,?,?,?,?,?,?,?,?)", (run_id, task_id, role, used_model, "completed" if ok else "failed", usage.get("input_tokens"), usage.get("output_tokens"), now(), error_code))
     db.execute("INSERT INTO agent_messages VALUES(?,?,?,?,?,?)", (uid(), task_id, run_id, role, summary[:3000], now()))
     if ok:
-        db.execute("INSERT INTO usage_records VALUES(?,?,?,?,?,?,?,?)", (uid(), owner, task_id, MODEL, usage.get("input_tokens"), usage.get("output_tokens"), None, now()))
+        db.execute("INSERT INTO usage_records VALUES(?,?,?,?,?,?,?,?)", (uid(), owner, task_id, used_model, usage.get("input_tokens"), usage.get("output_tokens"), None, now()))
 
 
 def attachment_text_chunks(content: str, limit: int = 11_000) -> list[str]:

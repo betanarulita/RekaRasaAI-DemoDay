@@ -79,6 +79,7 @@
 .brief-tone-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
 .brief-tone-fields>label,.brief-project-field>label{display:flex;flex-direction:column;gap:7px;min-width:0}
 .brief-tone-fields>label{margin:0}.brief-tone-fields .optional-label{font-weight:400}
+.brief-model-routing{display:flex;flex-direction:column;gap:7px;margin:14px 0 20px}.brief-model-routing small{color:var(--muted);font-size:.75rem;font-weight:400;line-height:1.5}
 .brief-composer .brief-voice-note{font-size:.8125rem;margin:8px 0 20px;line-height:1.5}
 .brief-composer .output-preferences summary{font-size:.8125rem;min-height:44px;display:list-item;align-content:center}
 @media(max-width:600px){.brief-tone-fields{grid-template-columns:minmax(0,1fr);gap:16px}.brief-composer .brief-form .two-fields{grid-template-columns:minmax(0,1fr);gap:0}}
