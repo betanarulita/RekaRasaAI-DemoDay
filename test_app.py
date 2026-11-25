@@ -51,7 +51,7 @@ SAFE_DRAFT = (
     "Mix one sachet with hot water, stir well, and serve warm. Pack size: ten sachets. "
     "Keep the tin closed and dry after opening, and finish within two months."
 )
-CATALOG_DRAFT = "PRODUCT TITLE: Jahe Rasa ginger and honey drink mix\nDESCRIPTION: " + SAFE_DRAFT
+CATALOG_DRAFT = "TITLE: Jahe Rasa ginger and honey drink mix\nDESCRIPTION: " + SAFE_DRAFT
 
 
 def campaign_brief_workbook(requests, headers=None, template=None):
@@ -1309,11 +1309,13 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("do not return a verdict", app.REVIEWER_INSTRUCTIONS)
         self.assertIn("explanation and recommendation must both be non-empty after trimming, including when result is Pass", app.REVIEWER_INSTRUCTIONS)
         self.assertIn("Do not derive serving, yield, portion, use-count or performance quantities from package size, ingredients or preparation instructions unless the selected source explicitly states that relationship", app.REVIEWER_INSTRUCTIONS)
-        self.assertIn("Treat wording that links the product to a consumer effect, including mood, comfort, energy, or convenience, as a product claim", app.REVIEWER_INSTRUCTIONS)
-        self.assertIn("when the brief explicitly forbids benefits, also mark Brief fit Fail", app.REVIEWER_INSTRUCTIONS)
-        self.assertIn("even when it is subjective, metaphorical, or phrased as lifestyle copy", app.REVIEWER_INSTRUCTIONS)
+        self.assertIn("Interpret Writer's creative language fairly and in context", app.REVIEWER_INSTRUCTIONS)
+        self.assertIn("Distinguish a clearly figurative simile, metaphor, hyperbole or joke that a reasonable audience reads as non-literal from a factual or implied product effect", app.REVIEWER_INSTRUCTIONS)
+        self.assertIn("Do not flag or fail a line merely because it uses figurative language or contains a word associated with mood, comfort, energy or convenience", app.REVIEWER_INSTRUCTIONS)
+        self.assertIn("if it reasonably promises or implies a concrete product attribute or consumer outcome, assess that underlying assertion against relevant evidence", app.REVIEWER_INSTRUCTIONS)
+        self.assertIn("mark Brief fit Fail only when the original brief explicitly forbids it", app.REVIEWER_INSTRUCTIONS)
+        self.assertIn("If the line is plainly non-literal and does not reasonably assert a concrete product fact or outcome, do not treat it as a factual claim", app.REVIEWER_INSTRUCTIONS)
         self.assertIn("Treat the requested tone as a writing style, not evidence about the product, venue, hospitality, or atmosphere", app.REVIEWER_INSTRUCTIONS)
-        self.assertIn("mark Brief fit Fail when the brief forbids that mood", app.REVIEWER_INSTRUCTIONS)
         self.assertIn("a passing recommendation should say to retain the compliant approach or maintain the checked condition, not be blank", app.REVIEWER_INSTRUCTIONS)
         self.assertIn("Every findings.rules and findings.additional object must include exactly these keys: criterion, result, claim, rule_id, evidence_source_id, explanation, recommendation", app.REVIEWER_INSTRUCTIONS)
         for phrase in (
@@ -2116,6 +2118,24 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(status, 409, body)
         self.assertEqual(body["code"], "approval_blocked")
 
+    def test_editor_can_override_a_failed_review_with_a_reason_at_any_revision(self):
+        cookie, csrf, owner = self.register()
+        project_id = self.project(owner)
+        task_id, _ = self.task(owner, project_id, status="needs_revision", remediation_count=0, review="Fail")
+        status, _, body = self.request("/api/approve", "POST", {
+            "task_id": task_id, "human_override": True, "note": "Editor checked the metaphor against the brief."
+        }, cookie, csrf)
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["task"]["status"], "human_approved")
+        db = app.connect()
+        event = db.execute("SELECT details FROM audit_events WHERE task_id=? AND event='human.approved' ORDER BY rowid DESC LIMIT 1", (task_id,)).fetchone()
+        db.close()
+        details = json.loads(event["details"])
+        self.assertTrue(details["human_override"])
+        self.assertFalse(details["revision_limit_override"])
+        self.assertEqual(details["review_verdict"], "Fail")
+        self.assertEqual(details["note"], "Editor checked the metaphor against the brief.")
+
     def test_blocked_approval_is_recorded_in_the_audit_trail(self):
         """A refused approval must survive the request rollback.
 
@@ -2252,7 +2272,7 @@ class WorkflowTests(unittest.TestCase):
                     self.assertEqual(len(payload["campaign_context"]["completed_sibling_drafts"]), 1)
                     self.assertIn("A warm pause in the middle", payload["campaign_context"]["completed_sibling_drafts"][0]["content"])
                 self.assertEqual(payload["sources"][0]["id"], source)
-                content = "HOOK: A warm pause in the middle of your day.\nSCENE 1: Steam rising from a cup on a wooden table, morning light.\nVOICEOVER: Ginger and honey, mixed with hot water, nothing else needed.\nSCENE 2: Hands holding the cup, close on the steam.\nVOICEOVER: Ten sachets in a tin, small batches, made in Bandung.\nCTA: See product details." if payload["this_task"]["platform"] == "TikTok" else "PRODUCT TITLE: Ginger and honey drink mix\nDESCRIPTION: A warm drink made with ginger and honey. Mix one sachet with hot water, stir, and serve. Pack size: ten sachets. Blended in small batches. Keep the tin closed and dry after opening."
+                content = "HOOK: A warm pause in the middle of your day.\nSCENE 1: Steam rising from a cup on a wooden table, morning light.\nVOICEOVER: Ginger and honey, mixed with hot water, nothing else needed.\nSCENE 2: Hands holding the cup, close on the steam.\nVOICEOVER: Ten sachets in a tin, small batches, made in Bandung.\nCTA: See product details." if payload["this_task"]["platform"] == "TikTok" else "TITLE: Ginger and honey drink mix\nDESCRIPTION: A warm drink made with ginger and honey. Mix one sachet with hot water, stir, and serve. Pack size: ten sachets. Blended in small batches. Keep the tin closed and dry after opening."
                 return {"drafts":[{"task_id":payload["this_task"]["id"], "content":content, "source_ids":[source]}]}, {"input_tokens": 40, "output_tokens": 35}
             return reviewer_v2_output([{"criterion":rule, "result":"Pass", "claim":"Ginger and honey", "rule_id":rule, "evidence_source_id":source, "explanation":"Checked against project source and brief.", "recommendation":"No change required."} for rule in rules] + content_quality_findings()), {"input_tokens": 50, "output_tokens": 25}
 
@@ -2279,7 +2299,7 @@ class WorkflowTests(unittest.TestCase):
                 if task["platform"] == "TikTok":
                     self.assertIn("SCENE 1:", generated["task"]["versions"][0]["content"])
                 else:
-                    self.assertIn("PRODUCT TITLE:", generated["task"]["versions"][0]["content"])
+                    self.assertIn("TITLE:", generated["task"]["versions"][0]["content"])
                 self.assertEqual(generated["review"]["verdict"], "Pass", json.dumps(generated["review"], ensure_ascii=False))
                 self.assertEqual(generated["task"]["status"], "approved_pending_human")
                 status, _, approved = self.request("/api/approve", "POST", {"task_id":task["id"], "note":"Approved for manual export."}, cookie, csrf)
@@ -4538,6 +4558,14 @@ class WriterPromptTests(unittest.TestCase):
         self.assertIn("Never invent price, offer, stock, ingredients, composition, benefits, certification, safety, specifications, amounts, durations, or numbers", caption)
         self.assertIn("Do not treat a familiar time cue such as 'before the day starts' as a fresh angle by itself", caption)
         self.assertIn("When facts are sparse", caption)
+        self.assertIn("audience-relevant hook and lively, relatable, persuasive language", caption)
+        self.assertIn("without misleading clickbait or promises of engagement, sales, or results", caption)
+        self.assertIn("Figurative hyperbole, analogy, and humor are allowed only when readers can recognize them as non-literal", caption)
+        self.assertIn("underlying product quality or function is supported by the brief or a selected source", caption)
+        self.assertIn("Mention limitations, conditions, or drawbacks only when the brief or a selected source provides them", caption)
+        revision = app.writer_instructions("Instagram caption", remediation=True, platform="Instagram")
+        self.assertIn("Fix the underlying meaning or implication, not just matching words", revision)
+        self.assertIn("Figurative hyperbole, analogy, and humor", revision)
 
     def test_writer_source_selection_prioritizes_campaign_facts_and_brand_memory(self):
         sources = [

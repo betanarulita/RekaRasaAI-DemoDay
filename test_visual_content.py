@@ -167,14 +167,14 @@ class VisualWorkflowTests(unittest.TestCase):
             code, _, generated = self.request("/api/generate-image", "POST", {"task_id": task_id, "prompt": "Another composition", "ratio": "square"}, self.cookie, self.csrf)
         self.assertEqual(code, 201, generated)
         _, _, composed = self.compose(generated["image"]["id"])
-        self.assertEqual(composed["composition"]["status"], "pending_visual_approval")
+        self.assertEqual(composed["composition"]["status"], "pending_visual_review")
         self.assertIsNone(composed["composition"]["approved_at"])
 
     def test_model_failure_leaves_no_images_or_visual_approvals(self):
         task_id, _ = self.task(self.owner, self.project_id)
         with patch.object(app, "call_comfyui_provider", side_effect=app.APIError(504, "Timeout", "image_provider_timeout")):
             code, _, body = self.request("/api/generate-image", "POST", {"task_id": task_id, "prompt": "Neutral concept"}, self.cookie, self.csrf)
-        self.assertEqual(code, 504, body)
+        self.assertEqual(code, 503, body)
         db = app.connect()
         for table in ("generated_images", "visual_compositions", "approvals"):
             self.assertEqual(db.execute(f"SELECT count(*) FROM {table}").fetchone()[0], 0)
@@ -231,7 +231,7 @@ class VisualWorkflowTests(unittest.TestCase):
         prompt, size = provider.call_args.args
         self.assertIn("Konsep permukaan netral", prompt)
         self.assertIn("Soft daylight", prompt)
-        self.assertIn("no text, lettering, logos", prompt)
+        self.assertIn("without new lettering", prompt)
         self.assertEqual(size, "1344x768")
         db = app.connect()
         event = db.execute("SELECT details FROM audit_events WHERE event='image.generated' ORDER BY rowid DESC LIMIT 1").fetchone()
@@ -297,7 +297,7 @@ class VisualWorkflowTests(unittest.TestCase):
         code, _, after_copy_approval = self.request("/api/images?task_id=" + task_id, cookie=self.cookie)
         self.assertEqual(code, 200, after_copy_approval)
         pending_visual = next(item for item in after_copy_approval["compositions"] if item["id"] == visual["id"])
-        self.assertEqual(pending_visual["status"], "pending_visual_approval")
+        self.assertEqual(pending_visual["status"], "pending_visual_review")
         self.assertIsNone(pending_visual["download_url"])
         self.assertEqual(self.request(visual["preview_url"] + "&download=1", cookie=self.cookie)[0], 409)
         code, _, approved = self.approve_visual(visual["id"])
@@ -329,7 +329,7 @@ class VisualWorkflowTests(unittest.TestCase):
         code, _, images = self.request("/api/images?task_id=" + task_id, cookie=self.cookie)
         self.assertEqual(code, 200, images)
         current = {item["id"]: item for item in images["compositions"]}
-        self.assertEqual(current[first_visual["id"]]["status"], "pending_visual_approval")
+        self.assertEqual(current[first_visual["id"]]["status"], "pending_visual_review")
         self.assertIsNone(current[first_visual["id"]]["download_url"])
         self.assertEqual(current[second_visual["id"]]["status"], "human_approved")
         self.assertEqual(self.request(first_visual["preview_url"] + "&download=1", cookie=self.cookie)[0], 409)
