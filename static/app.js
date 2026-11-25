@@ -581,7 +581,7 @@ function simplifyWorkbench(task,current=task.versions?.at(-1)){
   }
  }
  if(!current)return;
- const latest=task.versions?.at(-1),historical=current.id!==latest?.id;
+ const historical=current.id!==latest?.id;
  const approved=!historical&&task.status==='human_approved'&&!!current.human_approved;
  const display=document.querySelector('#draft-display');if(!display)return;
  const blocks=isImageTask(task)?writerOutputBlocks(current.content):null;
