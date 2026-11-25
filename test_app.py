@@ -601,7 +601,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(body["response_format"]["json_schema"]["name"], "planner_output")
         self.assertNotIn("minItems", json.dumps(body["response_format"]))
         self.assertEqual(parsed, planner)
-        self.assertEqual(usage, {"input_tokens":12,"output_tokens":9})
+        self.assertEqual(usage, {"input_tokens":12,"output_tokens":9,"model":app.MODEL})
 
     def test_groq_reviewer_request_has_headroom_for_complete_v2_output(self):
         reviewer = reviewer_v2_output()
@@ -615,7 +615,7 @@ class WorkflowTests(unittest.TestCase):
         with patch.dict(os.environ, {"GROQ_API_KEY": "test-only-key"}), patch.object(app, "urlopen", return_value=FakeResponse()) as request:
             parsed, _usage = app.llm_json("Reviewer", app.REVIEWER_INSTRUCTIONS, {"rules": app.RULES}, app.REVIEW_SCHEMA)
         body = json.loads(request.call_args.args[0].data)
-        self.assertEqual(body["max_completion_tokens"], 4096)
+        self.assertEqual(body["max_completion_tokens"], 2048)
         self.assertTrue(body["response_format"]["json_schema"]["strict"])
         self.assertEqual(parsed, reviewer)
 
@@ -972,7 +972,7 @@ class WorkflowTests(unittest.TestCase):
     def test_image_provider_api_error_is_mapped_without_crashing(self):
         cookie, csrf, owner = self.register()
         task_id, _ = self.task(owner, self.project(owner))
-        with patch.object(app, "call_comfyui_provider", side_effect=app.APIError(502, "The image provider could not complete this request.", "image_provider_error")):
+        with patch.object(app, "IMAGE_PROVIDER_FALLBACK", ""), patch.object(app, "call_comfyui_provider", side_effect=app.APIError(502, "The image provider could not complete this request.", "image_provider_error")):
             status, _, body = self.request("/api/generate-image", "POST", {"task_id":task_id,"prompt":"A visual","ratio":"square"}, cookie, csrf)
         self.assertEqual(status, 502)
         self.assertEqual(body["code"], "image_provider_error")
@@ -1069,8 +1069,8 @@ class WorkflowTests(unittest.TestCase):
             if url.endswith("/prompt"):
                 body = json.loads(request.data)
                 self.assertEqual(body["prompt"]["1"]["inputs"]["ckpt_name"], "sd15.safetensors")
-                self.assertEqual(body["prompt"]["4"]["inputs"]["width"], 408)
-                self.assertEqual(body["prompt"]["4"]["inputs"]["height"], 512)
+                self.assertEqual(body["prompt"]["4"]["inputs"]["width"], 512)
+                self.assertEqual(body["prompt"]["4"]["inputs"]["height"], 640)
                 self.assertEqual(body["prompt"]["15"]["inputs"]["width"], 1024)
                 self.assertEqual(body["prompt"]["15"]["inputs"]["height"], 1280)
                 return FakeResponse(json.dumps({"prompt_id":"fake-job"}).encode())
@@ -2668,7 +2668,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertGreater(event.request_bytes, event.payload_bytes)
         self.assertEqual(len(event.system_prompt_sha256), 64)
         self.assertEqual(len(event.output_schema_sha256), 64)
-        self.assertEqual(event.request_parameters["max_completion_tokens"], 4096)
+        self.assertEqual(event.request_parameters["max_completion_tokens"], 2048)
         self.assertEqual(event.request_parameters["response_format"], "json_schema")
         self.assertIn("Failed to validate JSON", event.provider_error_message)
         self.assertNotIn("PRIVATE_GENERATION_CLAIM_286", event.provider_error_message)

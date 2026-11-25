@@ -79,7 +79,7 @@ class ReferenceWorkflowTests(unittest.TestCase):
         self.assertEqual(graph['4']['class_type'], 'EmptyLatentImage')
         self.assertEqual(graph['5']['inputs']['denoise'], 1)
         self.assertNotIn('8', graph)
-        self.assertLessEqual(max(graph['4']['inputs']['width'], graph['4']['inputs']['height']), 512)
+        self.assertLessEqual(max(graph['4']['inputs']['width'], graph['4']['inputs']['height']), 640)
 
     def test_invalid_numeric_options_cannot_reach_inference(self):
         for strength in (True, '0.3', float('nan'), float('inf'), 0, 1, -0.1):
@@ -192,7 +192,7 @@ class ImageModeIntegrationTests(unittest.TestCase):
         self.assertIsNone(local.call_args.kwargs['mask'])
         self.assertEqual(local.call_args.kwargs['strength'], 0.1)
         self.assertEqual(local.call_args.kwargs['seed'], body['image']['seed'])
-        self.assertIn('Preserve the selected photo', local.call_args.args[0])
+        self.assertIn('Use the selected photo as-is', local.call_args.args[0])
         self.assertEqual(version_id, body['image']['copy_version_id'])
         other.assert_not_called()
 
@@ -232,10 +232,10 @@ class ImageModeIntegrationTests(unittest.TestCase):
         self.assertIn(body['image']['id'], {image['id'] for image in listed['images']})
         self.assertIn(composition['composition']['id'], {item['id'] for item in listed['compositions']})
 
-    def test_text_to_image_does_not_allow_a_remote_image_provider(self):
+    def test_text_to_image_rejects_an_unknown_image_provider(self):
         task_id, _ = self.task(self.owner, self.project_id)
         with patch.object(app, 'call_comfyui_provider') as local, patch.object(app, 'call_image_provider') as remote:
-            code, _, body = self.generate(task_id, mode='concept', provider='cloudflare')
+            code, _, body = self.generate(task_id, mode='concept', provider='remote')
         self.assertEqual(code, 400, body)
         self.assertEqual(body['code'], 'invalid_image_provider')
         local.assert_not_called()
@@ -400,7 +400,7 @@ class SelectedImageChatTests(unittest.TestCase):
                 self.assertIn(text, visible)
             self.assertIsNone(new['approved_at'])
             self.assertIsNone(new['approved_by'])
-            self.assertEqual(app.visual_status(db, new), 'pending_visual_approval')
+            self.assertEqual(app.visual_status(db, new), 'pending_visual_review')
             new_id = new['id']
             event = json.loads(db.execute("SELECT details FROM audit_events WHERE event='image.chat_edit' ORDER BY rowid DESC LIMIT 1").fetchone()[0])
             self.assertEqual(event['source_composition_id'], composition_id)
@@ -516,7 +516,7 @@ class SelectedImageChatTests(unittest.TestCase):
             self.assertEqual(new['version_id'], version_id)
             self.assertIsNone(new['approved_at'])
             self.assertIsNone(new['approved_by'])
-            self.assertEqual(app.visual_status(db, new), 'pending_visual_approval')
+            self.assertEqual(app.visual_status(db, new), 'pending_visual_review')
             self.assertIsNone(app.serialize_visual(db, new)['download_url'])
             self.assertEqual(app.visual_image_bytes(image), result)
             self.assertEqual(len(ElementTree.fromstring(new['svg_content']).findall('.//{http://www.w3.org/2000/svg}text')), 0)
