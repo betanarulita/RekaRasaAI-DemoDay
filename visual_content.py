@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import re
 import unicodedata
+from io import BytesIO
 from xml.sax.saxutils import escape
 
 
@@ -134,6 +135,38 @@ def _wrap(text: str, width: float) -> list[str]:
     return lines
 
 
+def _quiet_text_anchor(image: bytes, width: int, height: int, box_width: int, box_height: int) -> tuple[str, float]:
+    """Place exact copy in a visually quiet area instead of a fixed footer band."""
+    candidates = {
+        "top_left": (0.06, 0.06, "start"), "top_center": (0.5, 0.06, "middle"), "top_right": (0.94, 0.06, "end"),
+        "center_left": (0.06, 0.5, "start"), "center": (0.5, 0.5, "middle"), "center_right": (0.94, 0.5, "end"),
+        "bottom_left": (0.06, 0.94, "start"), "bottom_center": (0.5, 0.94, "middle"), "bottom_right": (0.94, 0.94, "end"),
+    }
+    try:
+        from PIL import Image, ImageFilter, ImageStat
+
+        with Image.open(BytesIO(image)) as source:
+            source.load()
+            gray = source.convert("L").resize((96, 96))
+            edge = gray.filter(ImageFilter.FIND_EDGES)
+            crop_w = max(1, min(96, round(box_width / width * 96)))
+            crop_h = max(1, min(96, round(box_height / height * 96)))
+            ranked = []
+            for name, (x_ratio, y_ratio, alignment) in candidates.items():
+                x = round(x_ratio * 96 - (crop_w if alignment == "end" else crop_w / 2 if alignment == "middle" else 0))
+                y = round(y_ratio * 96 - (crop_h if y_ratio > 0.5 else 0 if y_ratio < 0.5 else crop_h / 2))
+                x, y = min(max(0, x), 96 - crop_w), min(max(0, y), 96 - crop_h)
+                region = (x, y, x + crop_w, y + crop_h)
+                texture = ImageStat.Stat(gray.crop(region)).stddev[0]
+                edges = ImageStat.Stat(edge.crop(region)).mean[0]
+                luminance = ImageStat.Stat(gray.crop(region)).mean[0]
+                ranked.append((texture + edges * 0.35, name, luminance))
+            _, anchor, luminance = min(ranked)
+            return anchor, luminance
+    except Exception:
+        return "bottom_left", 96.0
+
+
 def composition_svg(image: bytes, media_type: str, size: str, copy: dict[str, str], overlays: list[dict] | None = None) -> bytes:
     if media_type not in ("image/png", "image/jpeg"):
         raise CompositionError("Only PNG and JPEG base images can be composed.")
@@ -147,11 +180,12 @@ def composition_svg(image: bytes, media_type: str, size: str, copy: dict[str, st
                 '<title>AI-generated visual with versioned copy</title>',
                 f'<image width="{width}" height="{height}" preserveAspectRatio="xMidYMid slice" href="data:{media_type};base64,{base64.b64encode(image).decode()}"/>']
     if any(copy.values()):
-        padding = round(width * .06)
-        available = width - 2 * padding
+        padding_x = round(width * .045)
+        padding_y = round(width * .035)
+        available = round(width * .82)
         scale = min(width / 1024, height / 1024 * 1.3)
         rows = []
-        for key, base_size in (("headline", 56), ("body", 42), ("cta", 40)):
+        for key, base_size in (("headline", 64), ("body", 38), ("cta", 34)):
             font_size = round(base_size * scale)
             longest_word = max((_units(word) for word in copy.get(key, "").split()), default=1)
             fitted = min(font_size, int(available / longest_word))
@@ -161,17 +195,36 @@ def composition_svg(image: bytes, media_type: str, size: str, copy: dict[str, st
             lines = _wrap(copy.get(key, ""), available / font_size)
             if lines:
                 rows.append((key, font_size, lines))
-        needed = 2 * padding + sum(len(lines) * size * 1.3 + 16 * scale for _, size, lines in rows)
+        needed = 2 * padding_y + sum(len(lines) * size * (1.16 if key == "headline" else 1.3) + 12 * scale for key, size, lines in rows)
         if needed > height * .64:
             raise CompositionError("The copy does not fit this canvas. Shorten the labelled blocks or choose a taller canvas; no text was clipped.")
-        top = round(height - needed)
-        elements.append(f'<rect y="{top}" width="{width}" height="{height-top}" fill="#173528"/>')
-        y = top + padding
+        max_line = max((_units(line) * size for _, size, lines in rows for line in lines), default=available * .6)
+        card_width = min(width - 2 * padding_x, round(max_line + 2 * padding_x))
+        card_height = round(needed)
+        anchor, luminance = _quiet_text_anchor(image, width, height, card_width, card_height)
+        alignment, x_ratio, y_ratio = {
+            "top_left": ("start", .06, .06), "top_center": ("middle", .5, .06), "top_right": ("end", .94, .06),
+            "center_left": ("start", .06, .5), "center": ("middle", .5, .5), "center_right": ("end", .94, .5),
+            "bottom_left": ("start", .06, .94), "bottom_center": ("middle", .5, .94), "bottom_right": ("end", .94, .94),
+        }[anchor]
+        box_x = round(width * x_ratio - (card_width if alignment == "end" else card_width / 2 if alignment == "middle" else 0))
+        box_y = round(height * y_ratio - (card_height if y_ratio > .5 else 0 if y_ratio < .5 else card_height / 2))
+        box_x, box_y = min(max(0, box_x), width - card_width), min(max(0, box_y), height - card_height)
+        light_backing = luminance > 145
+        panel = "#172b31" if light_backing else "#fffaf1"
+        ink = "#fffaf1" if light_backing else "#172b31"
+        text_anchor = "middle" if alignment == "middle" else alignment
+        text_x = box_x + card_width // 2 if alignment == "middle" else box_x + padding_x if alignment == "start" else box_x + card_width - padding_x
+        radius = round(min(width, height) * .035)
+        elements.append(f'<rect x="{box_x}" y="{box_y}" width="{card_width}" height="{card_height}" rx="{radius}" fill="{panel}" fill-opacity=".91"/>')
+        y = box_y + padding_y
         for key, font_size, lines in rows:
             for line in lines:
-                y += font_size * 1.3
-                elements.append(f'<text x="{padding}" y="{round(y)}" fill="#ffffff" font-family="Arial, sans-serif" font-size="{font_size}" font-weight="{700 if key != "body" else 400}">{escape(line)}</text>')
-            y += 16 * scale
+                y += font_size * (1.16 if key == "headline" else 1.3)
+                family = "Georgia, serif" if key == "headline" else "Arial, sans-serif"
+                weight = 700 if key != "body" else 400
+                elements.append(f'<text x="{text_x}" y="{round(y)}" text-anchor="{text_anchor}" fill="{ink}" font-family="{family}" font-size="{font_size}" font-weight="{weight}">{escape(line)}</text>')
+            y += 12 * scale
     anchors = {
         "top_left": ("start", 0.06, 0.08), "top_center": ("middle", 0.5, 0.08), "top_right": ("end", 0.94, 0.08),
         "center_left": ("start", 0.06, 0.5), "center": ("middle", 0.5, 0.5), "center_right": ("end", 0.94, 0.5),

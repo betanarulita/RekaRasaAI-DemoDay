@@ -6,6 +6,7 @@ import re
 import struct
 import unicodedata
 import zipfile
+from datetime import date, timedelta
 import zlib
 from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape
@@ -26,6 +27,8 @@ COLUMNS = (
     "channels",
     "supporting_information",
     "additional_notes",
+    "folder_name",
+    "deadline",
 )
 MAX_REQUESTS = 3
 MAX_DATA_ROWS = 200
@@ -60,6 +63,8 @@ ALIASES = {
         "info_pendukung", "info pendukung", "catatan_pendukung",
     },
     "additional_notes": {"additional_notes", "additional notes", "notes", "catatan_tambahan", "catatan tambahan", "catatan_lain"},
+    "folder_name": {"folder_name", "folder name", "project_folder", "project folder", "nama_folder", "nama folder", "nama_folder_proyek", "nama folder proyek", "folder", "folder_tujuan", "folder tujuan"},
+    "deadline": {"deadline", "due_date", "due date", "tanggal_deadline", "tanggal deadline", "tanggal_tenggat", "tanggal tenggat", "deadline_produksi", "deadline produksi", "tenggat"},
 }
 HEADER_TO_FIELD = {alias: field for field, aliases in ALIASES.items() for alias in aliases}
 SHEET_COLUMNS = tuple(f"column_{index}" for index in range(MAX_COLUMNS))
@@ -129,6 +134,10 @@ def _row_fields(headers: list[str], values: list[str], line_number: int) -> tupl
         if field:
             if fields[field]:
                 raise ValueError(f"Row {line_number}: more than one header maps to '{field}'. Keep one of those columns.")
+            if field == "deadline":
+                text = _normalize_deadline(text, line_number)
+            if field == "folder_name" and len(text) > 100:
+                raise ValueError(f"Row {line_number}: keep folder_name within 100 characters.")
             fields[field] = text
         else:
             label = re.sub(r"\s+", " ", header).strip()[:80]
@@ -140,6 +149,22 @@ def _row_fields(headers: list[str], values: list[str], line_number: int) -> tupl
     if sum(map(len, fields.values())) + sum(len(value) for value in extra_fields.values()) > MAX_ROW_CHARS:
         raise ValueError(f"Row {line_number}: keep the combined row within {MAX_ROW_CHARS:,} characters.")
     return fields, extra_fields
+
+
+def _normalize_deadline(value: str, line_number: int) -> str:
+    """Accept an ISO date or an Excel date serial and store YYYY-MM-DD."""
+    if not value:
+        return ""
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        try:
+            return date.fromisoformat(value).isoformat()
+        except ValueError:
+            pass
+    if re.fullmatch(r"\d{1,6}", value):
+        serial = int(value)
+        if 1 <= serial <= 2_958_465:
+            return (date(1899, 12, 30) + timedelta(days=serial)).isoformat()
+    raise ValueError(f"Row {line_number}: enter deadline as YYYY-MM-DD (for example 2026-12-15).")
 
 
 def parse_campaign_brief(raw: bytes, name: str) -> dict:
@@ -192,6 +217,8 @@ def campaign_reference_text(name: str, rows: list[dict]) -> str:
     for row in rows:
         entries = []
         for field, value in row.get("fields", {}).items():
+            if field in ("folder_name", "deadline"):
+                continue
             if value:
                 entries.append(f"{field}: {value}")
         entries.extend(f"{header}: {value}" for header, value in row.get("extra_fields", {}).items())
@@ -211,9 +238,9 @@ def template_campaign_brief_xlsx() -> bytes:
     rows = [f'<row r="1">{header_cells}</row>'] + [f'<row r="{number}"></row>' for number in range(2, MAX_REQUESTS + 2)]
     widths = "".join(f'<col min="{index}" max="{index}" width="24" customWidth="1"/>' for index in range(1, len(COLUMNS) + 1))
     prompt = (
-        "Rows with content_request create one separate request (max 3). Other cells are optional. "
-        "Rows without content_request are supporting product/project references, not content requests. "
-        "You may also use Indonesian header names such as Nama Produk, Deskripsi, Harga Produk, Promo, and Ide Konten."
+        "Each content_request row creates a plan (max 3); other rows are references. "
+        "folder_name routes to a project folder; empty values go to Inbox and new folder names are created automatically. "
+        "deadline uses YYYY-MM-DD and means production deadline, not promotion date. Indonesian headers are supported."
     )
     validation = (
         '<dataValidations count="1"><dataValidation type="textLength" operator="lessThanOrEqual" '

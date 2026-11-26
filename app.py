@@ -718,6 +718,8 @@ CAMPAIGN_BRIEF_LABELS = {
     "key_message": "Key message",
     "channels": "Channels",
     "additional_notes": "Additional notes",
+    "folder_name": "Destination folder",
+    "deadline": "Production deadline",
 }
 
 
@@ -740,7 +742,15 @@ def validate_campaign_brief_request(value: object) -> dict:
     for column, item in fields.items():
         if not isinstance(item, str):
             raise APIError(400, f"Campaign Brief field {column} must be text.", "invalid_campaign_brief")
-        normalized_fields[column] = item.strip()
+        cleaned = item.strip()
+        if column == "deadline":
+            normalized_fields[column] = validate_brief_deadline(cleaned) or ""
+        elif column == "folder_name":
+            if len(cleaned) > 100:
+                raise APIError(400, "Campaign Brief folder_name must be within 100 characters.", "invalid_campaign_brief")
+            normalized_fields[column] = cleaned
+        else:
+            normalized_fields[column] = cleaned
     if not normalized_fields["content_request"]:
         raise APIError(400, "Campaign Brief row needs a content_request.", "invalid_campaign_brief")
     extra_fields = value.get("extra_fields", {})
@@ -764,6 +774,8 @@ def validate_campaign_brief_request(value: object) -> dict:
 def unified_campaign_brief(chat_brief: str, campaign_request: dict) -> str:
     grouped = {}
     for column in CAMPAIGN_BRIEF_COLUMNS:
+        if column in ("folder_name", "deadline"):
+            continue
         value = campaign_request["fields"][column]
         if not value:
             continue
@@ -777,6 +789,9 @@ def unified_campaign_brief(chat_brief: str, campaign_request: dict) -> str:
     row = campaign_request["row_number"]
     total = campaign_request["row_count"]
     lines = [f"Campaign Brief request {row} of {total} from {campaign_request['workbook_name']} row {campaign_request['source_row_number']}."]
+    deadline = campaign_request["fields"].get("deadline", "")
+    if deadline:
+        lines.append(f"Production deadline: {deadline}. This is a production-planning date, not a promotion or event date.")
     if chat_brief:
         lines.append("Chat brief: " + chat_brief)
     lines.extend(" / ".join(group["labels"]) + ": " + group["value"] for group in grouped.values())
@@ -3749,6 +3764,34 @@ def image_prompt_direction(task: sqlite3.Row, project_name: str) -> str:
             "No text, logos, watermarks, or certification marks.")[:2500]
 
 
+def cloudflare_concept_prompt(task: sqlite3.Row, project_name: str, writer_direction: str, human_revision_note: str = "") -> str:
+    """Build a compact, brief-grounded prompt within FLUX.1 Schnell's input limit."""
+    def clip(value, limit):
+        value = re.sub(r"\s+", " ", str(value or "")).strip()
+        if len(value) <= limit:
+            return value
+        shortened = value[:limit].rsplit(" ", 1)[0].rstrip(" ,;:-")
+        return shortened + "…"
+
+    parts = [
+        f"Create an original promotional visual for {clip(project_name, 90)}. {clip(task['title'], 100)}.",
+        f"Brief: {clip(task['brief'], 380)}",
+        f"Audience: {clip(task['audience'], 120)}",
+        f"Tone: {clip(task['tone'], 100)}",
+        f"Creative angle: {clip(task['angle'], 150)}",
+        f"Goal: {clip(task['goal'], 100)}",
+        f"Writer visual direction: {clip(writer_direction, 280)}",
+    ]
+    if human_revision_note:
+        parts.append(f"Human revision: {clip(human_revision_note, 220)}")
+    parts.append(
+        "Make the composition expressive and specific to the brief; avoid a default centered-product or fixed-template layout. "
+        "No rendered text, logos, badges, unsupported claims, or invented packaging; exact copy is composed separately."
+    )
+    prompt = "\n".join(part for part in parts if not part.endswith(": "))
+    return prompt[:cloudflare_images.MAX_PROMPT_CHARS]
+
+
 COMFYUI_GENERATION_LOCK = threading.Lock()
 
 
@@ -3786,11 +3829,11 @@ def call_image_provider(prompt: str, size: str, provider: str | None = None, see
     return call_comfyui_provider(prompt, size, seed=seed)
 
 
-def call_image_provider_with_fallback(prompt: str, size: str, provider: str | None = None, seed=None) -> tuple[bytes, str, str]:
+def call_image_provider_with_fallback(prompt: str, size: str, provider: str | None = None, seed=None, cloudflare_prompt: str | None = None) -> tuple[bytes, str, str]:
     """Use the selected provider, with optional Cloudflare fallback for text concepts."""
     selected = (provider or IMAGE_PROVIDER).strip().lower()
     if selected == "cloudflare":
-        image, media_type = call_image_provider(prompt, size, provider="cloudflare", seed=seed)
+        image, media_type = call_image_provider(cloudflare_prompt or prompt, size, provider="cloudflare", seed=seed)
         return image, media_type, "cloudflare"
     if selected != "comfyui":
         raise APIError(400, "Choose ComfyUI or Cloudflare for text concepts.", "invalid_image_provider")
@@ -3802,7 +3845,7 @@ def call_image_provider_with_fallback(prompt: str, size: str, provider: str | No
             raise
         log.warning("image.provider_fallback", extra={"from_provider": "comfyui", "to_provider": "cloudflare", "reason": primary_error.code})
         try:
-            image, media_type = call_image_provider(prompt, size, provider="cloudflare", seed=seed)
+            image, media_type = call_image_provider(cloudflare_prompt or prompt, size, provider="cloudflare", seed=seed)
             return image, media_type, "cloudflare"
         except APIError as fallback_error:
             raise APIError(503, "ComfyUI could not generate the image and Cloudflare fallback also failed: " + fallback_error.message, "image_providers_unavailable") from None
@@ -5012,8 +5055,12 @@ def application(environ, start_response):
                 combined_prompt = (shared_visual_direction + direction)[:10000]
                 image_bytes, media_type = call_comfyui_provider(combined_prompt, actual_size, reference=asset["content"], mask=mask, strength=strength, seed=generation_seed)
             elif mode == "concept":
+                compact_cloudflare_prompt = cloudflare_concept_prompt(
+                    task, task["project_name"], writer_direction, human_revision_note
+                )
                 image_bytes, media_type, actual_provider = call_image_provider_with_fallback(
-                    combined_prompt, actual_size, provider=actual_provider, seed=generation_seed
+                    combined_prompt, actual_size, provider=actual_provider, seed=generation_seed,
+                    cloudflare_prompt=compact_cloudflare_prompt,
                 )
             else:
                 raise APIError(400, "Choose Compose selected photo, text-to-image, image-to-image, or protected background editing.", "invalid_image_options")
@@ -5062,6 +5109,41 @@ def application(environ, start_response):
             preferences = normalize_project_preferences(data.get("preferences"))
             save_project_preferences(db, user_id, project_id, preferences, commit=True)
             return json_response(start_response, 200, {"project_id": project_id, "preferences": preferences})
+        if method == "POST" and path == "/api/inbox":
+            db.execute("BEGIN IMMEDIATE")
+            matches = db.execute("SELECT id,name FROM projects WHERE owner_id=? AND lower(trim(name))='inbox' ORDER BY created_at", (user_id,)).fetchall()
+            if len(matches) > 1:
+                db.rollback()
+                raise APIError(409, "Multiple Inbox folders exist. Rename or merge them before continuing.", "ambiguous_folder")
+            if matches:
+                project = matches[0]
+            else:
+                project_id = uid()
+                db.execute("INSERT INTO projects VALUES(?,?,?,?)", (project_id, user_id, "Inbox", now()))
+                audit(db, user_id, "project.created", {"name": "Inbox", "kind": "default"}, project_id)
+                project = {"id": project_id, "name": "Inbox"}
+            db.commit()
+            return json_response(start_response, 200, {"id": project["id"], "name": project["name"]})
+        if method == "POST" and path == "/api/move-plan":
+            plan_id = str(data.get("plan_id", ""))
+            target_id = str(data.get("target_project_id", ""))
+            plan = db.execute("SELECT pl.id,pl.status,c.project_id,c.id AS conversation_id FROM plans pl JOIN briefs b ON b.id=pl.brief_id JOIN conversations c ON c.id=b.conversation_id WHERE pl.id=? AND c.owner_id=?", (plan_id, user_id)).fetchone()
+            if not plan:
+                raise APIError(404, "Plan not found.", "not_found")
+            target = ensure_project(db, user_id, target_id)
+            active_review = db.execute("SELECT 1 FROM tasks WHERE plan_id IN (SELECT pl.id FROM plans pl JOIN briefs b ON b.id=pl.brief_id WHERE b.conversation_id=?) AND status='reviewing' LIMIT 1", (plan["conversation_id"],)).fetchone()
+            if active_review:
+                raise APIError(409, "Wait for the current review to finish before moving this brief.", "invalid_state")
+            old_id = plan["project_id"]
+            if old_id == target_id:
+                return json_response(start_response, 200, {"ok": True, "project_id": target_id, "name": target["name"]})
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("UPDATE conversations SET project_id=? WHERE id=? AND owner_id=?", (target_id, plan["conversation_id"], user_id))
+            db.execute("UPDATE tasks SET project_id=? WHERE plan_id IN (SELECT pl.id FROM plans pl JOIN briefs b ON b.id=pl.brief_id WHERE b.conversation_id=?)", (target_id, plan["conversation_id"]))
+            db.execute("UPDATE generated_images SET project_id=? WHERE task_id IN (SELECT t.id FROM tasks t JOIN plans pl ON pl.id=t.plan_id JOIN briefs b ON b.id=pl.brief_id WHERE b.conversation_id=?)", (target_id, plan["conversation_id"]))
+            audit(db, user_id, "plan.moved", {"plan_id": plan_id, "from_project_id": old_id, "to_project_id": target_id}, target_id)
+            db.commit()
+            return json_response(start_response, 200, {"ok": True, "project_id": target_id, "name": target["name"]})
         if method == "GET" and path == "/api/projects":
             projects = [dict(r) for r in db.execute("SELECT * FROM projects WHERE owner_id=? ORDER BY created_at DESC", (user_id,)).fetchall()]
             for project in projects:
